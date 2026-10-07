@@ -1,5 +1,9 @@
 import { TZDate } from "@date-fns/tz";
 
+import { addDays, isoWeekday, parseDate } from "@/lib/calendar";
+
+export { addDays, isoWeekday };
+
 /**
  * Availability engine. Pure functions only: no database, no clock. Every
  * input, including "now", is passed in, so the logic can be tested
@@ -46,20 +50,7 @@ export type Slot = {
 };
 
 const MINUTE = 60_000;
-const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const TIME_PATTERN = /^(\d{2}):(\d{2})(?::(\d{2}))?$/;
-
-function parseDate(date: string): { year: number; month: number; day: number } {
-  const match = DATE_PATTERN.exec(date);
-  if (!match) throw new RangeError(`Invalid date "${date}", expected YYYY-MM-DD`);
-  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
-  // Reject impossible dates such as 2026-02-30, which Date would silently roll over.
-  const probe = new Date(Date.UTC(year, month - 1, day));
-  if (probe.getUTCMonth() !== month - 1 || probe.getUTCDate() !== day) {
-    throw new RangeError(`Invalid date "${date}"`);
-  }
-  return { year, month, day };
-}
 
 function parseTime(time: string): { hours: number; minutes: number } {
   const match = TIME_PATTERN.exec(time);
@@ -84,19 +75,6 @@ export function localDate(instant: Date, timezone: string): string {
   const local = new TZDate(instant.getTime(), timezone);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${local.getFullYear()}-${pad(local.getMonth() + 1)}-${pad(local.getDate())}`;
-}
-
-/** Adds whole calendar days to a "YYYY-MM-DD" date. */
-export function addDays(date: string, days: number): string {
-  const { year, month, day } = parseDate(date);
-  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
-}
-
-/** ISO weekday of a calendar date: 1 = Monday … 7 = Sunday. */
-export function isoWeekday(date: string): number {
-  const { year, month, day } = parseDate(date);
-  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
-  return weekday === 0 ? 7 : weekday;
 }
 
 /**

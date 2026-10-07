@@ -98,15 +98,24 @@ export async function insertAppointment(db: Db, input: AppointmentInput): Promis
     // first so the answer does not depend on that detail. The failed
     // transaction is already rolled back, so it is safe to query again.
     if (input.idempotencyKey && (overlaps || duplicateKey)) {
-      const [existing] = await db
-        .select()
-        .from(appointments)
-        .where(eq(appointments.idempotencyKey, input.idempotencyKey));
+      const existing = await findAppointmentByIdempotencyKey(db, input.idempotencyKey);
       if (existing) return { appointment: existing, manageToken: null, replayed: true };
     }
     if (overlaps) throw new SlotUnavailableError();
     throw error;
   }
+}
+
+/** The appointment created by an earlier request with this idempotency key, if any. */
+export async function findAppointmentByIdempotencyKey(
+  db: Db,
+  idempotencyKey: string,
+): Promise<Appointment | undefined> {
+  const [existing] = await db
+    .select()
+    .from(appointments)
+    .where(eq(appointments.idempotencyKey, idempotencyKey));
+  return existing;
 }
 
 /**

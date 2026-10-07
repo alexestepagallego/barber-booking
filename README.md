@@ -5,10 +5,9 @@
 Online booking for a barbershop, built to production standards. It is
 based on the real shop [Chane Barber](https://github.com/alexestepagallego/chanebarber).
 
-> 🚧 **Work in progress.** The booking engine (data model, double-booking
-> protection, availability and their tests) is done. The booking UI, the
-> manage-your-booking links, emails and the admin panel are next. See the
-> [roadmap](#roadmap).
+> 🚧 **Work in progress.** Customers can already browse services and book
+> online. Manage-your-booking links, emails and the admin panel are next.
+> See the [roadmap](#roadmap).
 
 ## Highlights
 
@@ -25,6 +24,9 @@ based on the real shop [Chane Barber](https://github.com/alexestepagallego/chane
   cut + beard occupy exactly their time; there is no fixed slot grid.
 - **Idempotent bookings.** A double tap or a network retry returns the same
   booking instead of an error or a duplicate.
+- **Graceful conflicts.** If someone books your time while you are filling
+  in the form, you get a clear message, the times refresh, and your details
+  stay filled in.
 - **Secrets stored as hashes.** "Manage your booking" links carry a 256-bit
   random token. Only its SHA-256 hash is stored, so a database leak does not
   leak working links.
@@ -77,7 +79,8 @@ npm run dev                   # http://localhost:3000
 
 ```
 drizzle/                 SQL migrations (0001 adds the no-overlap constraint)
-src/app/                 Next.js routes
+src/app/                 pages (landing, /book) and API route handlers
+src/lib/                 code shared by client and server: schemas, formatting, calendar
 src/server/db/           schema, client, migrations runner, seed
 src/server/booking/      booking logic: availability engine, repository, schedule lock
 src/server/security/     token generation and hashing
@@ -90,6 +93,7 @@ docs/                    architecture notes and decision records
 
 - [How double bookings are prevented](docs/concurrency.md)
 - [How availability is computed](docs/availability.md)
+- [HTTP API](docs/api.md)
 - [ADR 0001: Enforce "no overlap" in the database](docs/adr/0001-database-enforced-no-overlap.md)
 - [ADR 0002: Per-barber advisory lock](docs/adr/0002-per-barber-advisory-lock.md)
 
@@ -98,7 +102,7 @@ docs/                    architecture notes and decision records
 - [x] Project setup, CI, Docker Compose
 - [x] Data model, no-overlap constraint, concurrency tests
 - [x] Availability engine (split shifts, holidays, DST-safe)
-- [ ] Public booking flow
+- [x] Public booking flow
 - [ ] Manage-your-booking link (cancel / reschedule)
 - [ ] Confirmation and reminder emails with calendar invite
 - [ ] Admin panel
