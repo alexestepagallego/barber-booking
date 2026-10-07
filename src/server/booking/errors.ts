@@ -6,3 +6,8 @@ export class SlotUnavailableError extends Error {
     super(message);
   }
 }
+
+/** A referenced service or barber does not exist or is inactive. Maps to HTTP 404. */
+export class NotFoundError extends Error {
+  readonly name = "NotFoundError";
+}

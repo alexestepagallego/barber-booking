@@ -1,10 +1,12 @@
 # barber-booking
 
+[![CI](https://github.com/alexestepagallego/barber-booking/actions/workflows/ci.yml/badge.svg)](https://github.com/alexestepagallego/barber-booking/actions/workflows/ci.yml)
+
 Online booking for a barbershop, built to production standards. It is
 based on the real shop [Chane Barber](https://github.com/alexestepagallego/chanebarber).
 
 > 🚧 **Work in progress.** The booking engine (data model, double-booking
-> protection and its concurrency tests) is done. The booking UI, the
+> protection, availability and their tests) is done. The booking UI, the
 > manage-your-booking links, emails and the admin panel are next. See the
 > [roadmap](#roadmap).
 
@@ -15,6 +17,10 @@ based on the real shop [Chane Barber](https://github.com/alexestepagallego/chane
   advisory lock keeps concurrent requests from deadlocking each other. The
   test suite fires up to 100 simultaneous bookings at a real database and
   checks the invariant. [How it works →](docs/concurrency.md)
+- **Daylight-saving safe availability.** Opening hours are stored as
+  wall-clock times in the shop's time zone and turned into exact instants
+  per day, so "we open at 9" is right all year. Tested on both transition
+  days. [How it works →](docs/availability.md)
 - **Services with real durations.** A 15-minute beard trim and a 45-minute
   cut + beard occupy exactly their time; there is no fixed slot grid.
 - **Idempotent bookings.** A double tap or a network retry returns the same
@@ -73,7 +79,7 @@ npm run dev                   # http://localhost:3000
 drizzle/                 SQL migrations (0001 adds the no-overlap constraint)
 src/app/                 Next.js routes
 src/server/db/           schema, client, migrations runner, seed
-src/server/booking/      booking logic: repository, schedule lock, errors
+src/server/booking/      booking logic: availability engine, repository, schedule lock
 src/server/security/     token generation and hashing
 tests/unit/              pure logic
 tests/integration/       real-database tests, including concurrency
@@ -83,6 +89,7 @@ docs/                    architecture notes and decision records
 ## Documentation
 
 - [How double bookings are prevented](docs/concurrency.md)
+- [How availability is computed](docs/availability.md)
 - [ADR 0001: Enforce "no overlap" in the database](docs/adr/0001-database-enforced-no-overlap.md)
 - [ADR 0002: Per-barber advisory lock](docs/adr/0002-per-barber-advisory-lock.md)
 
@@ -90,7 +97,7 @@ docs/                    architecture notes and decision records
 
 - [x] Project setup, CI, Docker Compose
 - [x] Data model, no-overlap constraint, concurrency tests
-- [ ] Availability engine (split shifts, holidays, DST-safe)
+- [x] Availability engine (split shifts, holidays, DST-safe)
 - [ ] Public booking flow
 - [ ] Manage-your-booking link (cancel / reschedule)
 - [ ] Confirmation and reminder emails with calendar invite

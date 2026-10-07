@@ -19,6 +19,8 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@date-fns/tz": "^1.5.0",
+    "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.3",
     "next": "16.4.0",
     "postgres": "^3.4.9",
@@ -44,5 +46,6 @@
   },
   "engines": {
     "node": ">=24"
-  }
+  },
+  "type": "module"
 }
