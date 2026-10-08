@@ -37,6 +37,10 @@ export const shopSettings = pgTable(
   {
     id: smallint().primaryKey().default(1),
     name: text().notNull(),
+    /** Shown to customers who can no longer change a booking online, and in emails. */
+    phone: text(),
+    /** Used as the location of calendar invites. */
+    address: text(),
     /** IANA time zone used to interpret working hours, e.g. "Europe/Madrid". */
     timezone: text().notNull(),
     /** Candidate start times are generated every N minutes. */

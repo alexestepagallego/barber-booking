@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import type { CreateBookingInput } from "@/lib/booking-schema";
 import type { Db } from "@/server/db/client";
 import { barbers, services, shopSettings } from "@/server/db/schema";
+import { deriveManageToken } from "@/server/security/tokens";
 
 import {
   findAppointmentByIdempotencyKey,
@@ -45,7 +46,11 @@ export async function createBooking(
   if (options.idempotencyKey) {
     const existing = await findAppointmentByIdempotencyKey(db, options.idempotencyKey);
     if (existing)
-      return withNames(db, { appointment: existing, manageToken: null, replayed: true });
+      return withNames(db, {
+        appointment: existing,
+        manageToken: deriveManageToken(existing.id),
+        replayed: true,
+      });
   }
 
   const [settings] = await db.select().from(shopSettings).where(eq(shopSettings.id, 1));

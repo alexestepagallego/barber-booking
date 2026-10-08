@@ -15,6 +15,13 @@
       "when": 1791363531357,
       "tag": "0001_no_overlapping_appointments",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791442202757,
+      "tag": "0002_shop_contact_details",
+      "breakpoints": true
     }
   ]
 }

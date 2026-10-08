@@ -2,7 +2,7 @@ import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 
 import type { ApiErrorDto } from "@/lib/booking-schema";
-import { NotFoundError, SlotUnavailableError } from "@/server/booking/errors";
+import { NotFoundError, NotModifiableError, SlotUnavailableError } from "@/server/booking/errors";
 
 export function apiError(
   status: number,
@@ -39,6 +39,9 @@ export function handleApiError(error: unknown): Response {
       "slot_unavailable",
       "Sorry, that time is no longer available. Please choose another one.",
     );
+  }
+  if (error instanceof NotModifiableError) {
+    return apiError(409, "not_modifiable", error.message);
   }
   console.error("Unhandled API error", error);
   return apiError(500, "internal_error", "Something went wrong. Please try again.");

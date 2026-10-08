@@ -46,6 +46,8 @@ export async function getCatalogue() {
   return {
     shop: {
       name: shop.name,
+      phone: shop.phone,
+      address: shop.address,
       timezone: shop.timezone,
       bookingHorizonDays: shop.bookingHorizonDays,
       cancellationCutoffMinutes: shop.cancellationCutoffMinutes,

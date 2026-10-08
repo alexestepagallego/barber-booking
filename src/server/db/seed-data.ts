@@ -5,6 +5,9 @@
  */
 export const SHOP = {
   name: "Chane Barber",
+  // Placeholders: configure the real ones from the admin panel.
+  phone: "+34 600 000 000",
+  address: "Calle Mayor 1, Spain",
   timezone: "Europe/Madrid",
   slotIntervalMinutes: 15,
   bookingHorizonDays: 60,

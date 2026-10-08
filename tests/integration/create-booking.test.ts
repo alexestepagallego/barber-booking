@@ -82,7 +82,11 @@ describe("createBooking", () => {
     // The slot is now taken by this very booking, so a naive retry would get a 409.
     const retry = await createBooking(db, request(), { now, idempotencyKey });
 
-    expect(retry).toMatchObject({ replayed: true, manageToken: null, barberName: "Chane" });
+    expect(retry).toMatchObject({
+      replayed: true,
+      manageToken: first.manageToken,
+      barberName: "Chane",
+    });
     expect(retry.appointment.id).toBe(first.appointment.id);
     expect(await db.$count(appointments)).toBe(1);
   });

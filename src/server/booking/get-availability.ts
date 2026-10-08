@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, inArray, isNull, lt, or } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, lt, ne, or } from "drizzle-orm";
 
 import type { Db } from "@/server/db/client";
 import {
@@ -21,7 +21,19 @@ export type AvailabilityRequest = {
   /** A specific barber, or undefined for "no preference". */
   barberId?: string;
   now?: Date;
+  /**
+   * Ignore this appointment's own time when rescheduling it, so moving a
+   * booking by 15 minutes is not blocked by the booking itself.
+   */
+  excludeAppointmentId?: string;
+  /**
+   * "customer" applies the shop's notice and horizon rules. "staff" (admin
+   * panel) can book for right now (walk-ins) and up to a year ahead.
+   */
+  policy?: "customer" | "staff";
 };
+
+const STAFF_HORIZON_DAYS = 365;
 
 /**
  * Loads everything that affects one day's availability and hands it to the
@@ -30,6 +42,7 @@ export type AvailabilityRequest = {
  */
 export async function getAvailability(db: Db, request: AvailabilityRequest): Promise<Slot[]> {
   const now = request.now ?? new Date();
+  const staff = request.policy === "staff";
 
   const [settings] = await db.select().from(shopSettings).where(eq(shopSettings.id, 1));
   if (!settings) throw new Error("Shop settings are missing. Run the seed script.");
@@ -94,6 +107,9 @@ export async function getAvailability(db: Db, request: AvailabilityRequest): Pro
           eq(appointments.status, "confirmed"),
           lt(appointments.startsAt, day.end),
           gt(appointments.endsAt, day.start),
+          request.excludeAppointmentId
+            ? ne(appointments.id, request.excludeAppointmentId)
+            : undefined,
         ),
       ),
   ]);
@@ -103,8 +119,8 @@ export async function getAvailability(db: Db, request: AvailabilityRequest): Pro
     timezone: settings.timezone,
     durationMinutes: service.durationMinutes,
     slotIntervalMinutes: settings.slotIntervalMinutes,
-    minNoticeMinutes: settings.minNoticeMinutes,
-    bookingHorizonDays: settings.bookingHorizonDays,
+    minNoticeMinutes: staff ? 0 : settings.minNoticeMinutes,
+    bookingHorizonDays: staff ? STAFF_HORIZON_DAYS : settings.bookingHorizonDays,
     now,
     barbers: barberIds.map((barberId) => {
       const own = booked.filter((a) => a.barberId === barberId);

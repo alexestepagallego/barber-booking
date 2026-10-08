@@ -51,14 +51,42 @@ export type BookingConfirmationDto = {
   serviceName: string;
   customerName: string;
   customerEmail: string;
-  /** Path of the manage-your-booking page. Only present on the first response. */
-  managePath: string | null;
+  /** Path of the manage-your-booking page (contains the secret token). */
+  managePath: string;
 };
 
 export type ApiErrorDto = {
   error: {
-    code: "validation_error" | "not_found" | "slot_unavailable" | "internal_error";
+    code:
+      | "validation_error"
+      | "not_found"
+      | "slot_unavailable"
+      | "not_modifiable"
+      | "rate_limited"
+      | "bot_check_failed"
+      | "internal_error";
     message: string;
     fields?: Record<string, string>;
   };
+};
+
+/** Manage links carry 32 random bytes encoded as base64url: exactly 43 characters. */
+export const manageTokenSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
+
+export const rescheduleSchema = z.object({
+  startsAt: z.iso.datetime({ offset: true }).transform((value) => new Date(value)),
+});
+
+export type ManageAppointmentDto = {
+  id: string;
+  status: "confirmed" | "cancelled" | "completed" | "no_show";
+  startsAt: string;
+  endsAt: string;
+  barberName: string;
+  serviceName: string;
+  durationMinutes: number;
+  priceCents: number;
+  customerName: string;
+  canModify: boolean;
+  modifiableUntil: string;
 };

@@ -123,7 +123,7 @@ describe("insertAppointment", () => {
     const retry = await book(chane, at("10:00"), 30, { idempotencyKey });
 
     expect(first.replayed).toBe(false);
-    expect(retry).toMatchObject({ replayed: true, manageToken: null });
+    expect(retry).toMatchObject({ replayed: true, manageToken: first.manageToken });
     expect(retry.appointment.id).toBe(first.appointment.id);
     expect(await db.$count(appointments)).toBe(1);
   });

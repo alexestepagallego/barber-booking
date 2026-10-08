@@ -1,8 +1,10 @@
+import { after } from "next/server";
 import { z } from "zod";
 
 import { createBookingSchema, type BookingConfirmationDto } from "@/lib/booking-schema";
 import { createBooking } from "@/server/booking/create-booking";
 import { getDb } from "@/server/db/client";
+import { notifyBookingConfirmed } from "@/server/email/notifications";
 import { apiError, handleApiError } from "@/server/http/api-response";
 
 const idempotencyKeySchema = z.uuid().optional();
@@ -36,7 +38,10 @@ export async function POST(request: Request) {
     }
     const input = createBookingSchema.parse(json);
 
-    const result = await createBooking(getDb(), input, { idempotencyKey: idempotencyKey.data });
+    const db = getDb();
+    const result = await createBooking(db, input, { idempotencyKey: idempotencyKey.data });
+    // The email goes out after the response is sent, and only once per booking.
+    if (!result.replayed) after(() => notifyBookingConfirmed(db, result.appointment.id));
 
     const body: BookingConfirmationDto = {
       id: result.appointment.id,
@@ -46,7 +51,7 @@ export async function POST(request: Request) {
       serviceName: result.serviceName,
       customerName: result.appointment.customerName,
       customerEmail: result.appointment.customerEmail,
-      managePath: result.manageToken ? `/manage/${result.manageToken}` : null,
+      managePath: `/manage/${result.manageToken}`,
     };
     return Response.json(body, {
       status: result.replayed ? 200 : 201,

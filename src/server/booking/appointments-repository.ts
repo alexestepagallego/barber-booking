@@ -1,10 +1,12 @@
+import { randomUUID } from "node:crypto";
+
 import { eq } from "drizzle-orm";
 
 import type { Db } from "@/server/db/client";
 import { isConstraintViolation, PG_ERROR } from "@/server/db/errors";
 import { withTransactionRetry } from "@/server/db/retry";
 import { appointmentEvents, appointments, type Appointment } from "@/server/db/schema";
-import { generateManageToken } from "@/server/security/tokens";
+import { deriveManageToken, hashToken } from "@/server/security/tokens";
 
 import { SlotUnavailableError } from "./errors";
 import { lockBarberSchedule } from "./schedule-lock";
@@ -25,19 +27,13 @@ export type AppointmentInput = {
   actor: "customer" | "admin";
 };
 
-export type InsertResult =
-  | {
-      appointment: Appointment;
-      /** Plain-text secret for the manage link. Shown once, never stored. */
-      manageToken: string;
-      replayed: false;
-    }
-  | {
-      appointment: Appointment;
-      /** The original response already delivered the token (and the email has it). */
-      manageToken: null;
-      replayed: true;
-    };
+export type InsertResult = {
+  appointment: Appointment;
+  /** Secret for the manage link. Never stored: only its hash is. */
+  manageToken: string;
+  /** True when this was a retry of a request that had already succeeded. */
+  replayed: boolean;
+};
 
 /**
  * Inserts a confirmed appointment and its "created" event atomically.
@@ -57,7 +53,10 @@ export type InsertResult =
  * caller; this function only guarantees "no overlaps" and idempotency.
  */
 export async function insertAppointment(db: Db, input: AppointmentInput): Promise<InsertResult> {
-  const { token, hash } = generateManageToken();
+  // The id is generated here (not by the database) because the manage-link
+  // token is derived from it and its hash must be part of the same INSERT.
+  const id = randomUUID();
+  const token = deriveManageToken(id);
   const { actor, ...values } = input;
 
   try {
@@ -67,7 +66,7 @@ export async function insertAppointment(db: Db, input: AppointmentInput): Promis
 
         const [created] = await tx
           .insert(appointments)
-          .values({ ...values, manageTokenHash: hash, status: "confirmed" })
+          .values({ ...values, id, manageTokenHash: hashToken(token), status: "confirmed" })
           .returning();
         if (!created) throw new Error("INSERT … RETURNING returned no row");
 
@@ -99,7 +98,13 @@ export async function insertAppointment(db: Db, input: AppointmentInput): Promis
     // transaction is already rolled back, so it is safe to query again.
     if (input.idempotencyKey && (overlaps || duplicateKey)) {
       const existing = await findAppointmentByIdempotencyKey(db, input.idempotencyKey);
-      if (existing) return { appointment: existing, manageToken: null, replayed: true };
+      if (existing) {
+        return {
+          appointment: existing,
+          manageToken: deriveManageToken(existing.id),
+          replayed: true,
+        };
+      }
     }
     if (overlaps) throw new SlotUnavailableError();
     throw error;
