@@ -7,7 +7,7 @@ import { z } from "zod";
 
 import { formatDuration, formatLongDate, formatPrice, formatTime } from "@/lib/format";
 import { loadAdminCatalogue } from "@/server/admin/catalogue-admin";
-import { requireAdmin } from "@/server/admin/session";
+import { requireAdminPage } from "@/server/admin/session";
 import { localDate } from "@/server/booking/availability";
 import { getAppointmentDetails } from "@/server/booking/manage-appointment";
 import { appUrl } from "@/server/config";
@@ -18,6 +18,13 @@ import { deriveManageToken } from "@/server/security/tokens";
 import { AppointmentActions } from "./appointment-actions";
 
 export const metadata: Metadata = { title: "Appointment" };
+
+const UPDATED_MESSAGE = {
+  cancelled: "Appointment cancelled.",
+  moved: "Appointment moved.",
+  completed: "Marked as completed.",
+  no_show: "Marked as a no-show.",
+} as const;
 
 const EVENT_LABEL = {
   created: "Booked",
@@ -43,7 +50,7 @@ async function Detail({
   params,
   searchParams,
 }: Pick<PageProps<"/admin/appointments/[id]">, "params" | "searchParams">) {
-  await requireAdmin();
+  await requireAdminPage();
   const { id } = await params;
   if (!z.uuid().safeParse(id).success) notFound();
 
@@ -52,7 +59,7 @@ async function Detail({
   const details = await getAppointmentDetails(db, id, now);
   if (!details) notFound();
 
-  const [{ barbers }, events, { created }] = await Promise.all([
+  const [{ barbers }, events, { created, updated }] = await Promise.all([
     loadAdminCatalogue(db),
     db
       .select()
@@ -70,6 +77,18 @@ async function Detail({
       <Link href={`/admin?date=${date}`} className="text-muted hover:text-foreground text-sm">
         ← Back to {formatLongDate(details.startsAt, tz)}
       </Link>
+
+      {typeof updated === "string" && updated in UPDATED_MESSAGE && (
+        <p
+          role="status"
+          className="border border-emerald-400/50 px-4 py-3 text-sm text-emerald-200"
+        >
+          {UPDATED_MESSAGE[updated as keyof typeof UPDATED_MESSAGE]}
+          {details.customerEmail && (updated === "cancelled" || updated === "moved")
+            ? " The customer has been emailed."
+            : ""}
+        </p>
+      )}
 
       {created && (
         <p

@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 
-import { privatePageHeaders, securityHeaders } from "./src/server/security/headers";
+import { secretUrlHeaders, securityHeaders, staffPageHeaders } from "./src/server/security/headers";
 
 const dev = process.env.NODE_ENV === "development";
 
@@ -21,9 +21,9 @@ const nextConfig: NextConfig = {
     // stricter per-path rules come after the global defaults.
     return [
       { source: "/:path*", headers: securityHeaders(dev) },
-      { source: "/manage/:path*", headers: privatePageHeaders },
-      { source: "/admin", headers: privatePageHeaders },
-      { source: "/admin/:path*", headers: privatePageHeaders },
+      { source: "/manage/:path*", headers: secretUrlHeaders },
+      { source: "/admin", headers: staffPageHeaders },
+      { source: "/admin/:path*", headers: staffPageHeaders },
     ];
   },
 };

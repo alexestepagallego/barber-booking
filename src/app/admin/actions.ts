@@ -1,6 +1,6 @@
 "use server";
 
-import { refresh, updateTag } from "next/cache";
+import { updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { z } from "zod";
@@ -133,8 +133,9 @@ export async function staffCancel(_prev: ActionState, formData: FormData): Promi
     return domainError(error);
   }
   after(() => notifyCancelled(db, parsed.data.appointmentId));
-  refresh();
-  return { ok: true, message: "Appointment cancelled. The customer has been notified." };
+  // Redirect rather than return a message: the actions block disappears once
+  // the appointment is no longer confirmed, so the page shows the outcome.
+  redirect(`/admin/appointments/${parsed.data.appointmentId}?updated=cancelled`);
 }
 
 export async function staffOutcome(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -151,11 +152,7 @@ export async function staffOutcome(_prev: ActionState, formData: FormData): Prom
   } catch (error) {
     return domainError(error);
   }
-  refresh();
-  return {
-    ok: true,
-    message: parsed.data.outcome === "completed" ? "Marked as completed." : "Marked as a no-show.",
-  };
+  redirect(`/admin/appointments/${parsed.data.appointmentId}?updated=${parsed.data.outcome}`);
 }
 
 export async function staffReschedule(
@@ -182,12 +179,9 @@ export async function staffReschedule(
   } catch (error) {
     return domainError(error);
   }
-  if (moved) after(() => notifyRescheduled(db, parsed.data.appointmentId, before));
-  refresh();
-  return {
-    ok: true,
-    message: moved ? "Appointment moved. The customer has been notified." : "Nothing changed.",
-  };
+  if (!moved) return { ok: true, message: "Nothing changed: that is already its time and barber." };
+  after(() => notifyRescheduled(db, parsed.data.appointmentId, before));
+  redirect(`/admin/appointments/${parsed.data.appointmentId}?updated=moved`);
 }
 
 // ─── Catalogue ───────────────────────────────────────────────────────────────

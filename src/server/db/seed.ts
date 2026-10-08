@@ -8,8 +8,10 @@ import { BARBERS, SERVICES, SHOP, WEEKLY_SHIFTS } from "./seed-data";
 import { barberServices, barbers, services, shopSettings, workingHours } from "./schema";
 
 /**
- * Idempotent: running it twice leaves the same catalogue (upserts by slug).
- * Existing appointments are never touched.
+ * Idempotent: running it again restores the demo catalogue (upserts by slug,
+ * so ids stay stable) without touching appointments. The app caches the
+ * catalogue; callers inside a running app must invalidate the "catalogue"
+ * tag afterwards (the demo reset does).
  */
 export async function seedDatabase(db: Db) {
   return db.transaction(async (tx) => {
@@ -27,6 +29,7 @@ export async function seedDatabase(db: Db) {
           name: sql`excluded.name`,
           bio: sql`excluded.bio`,
           sortOrder: sql`excluded.sort_order`,
+          active: true,
         },
       })
       .returning();
@@ -41,6 +44,7 @@ export async function seedDatabase(db: Db) {
           durationMinutes: sql`excluded.duration_minutes`,
           priceCents: sql`excluded.price_cents`,
           sortOrder: sql`excluded.sort_order`,
+          active: true,
         },
       })
       .returning();

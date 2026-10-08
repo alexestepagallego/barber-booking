@@ -3,7 +3,7 @@ import { Suspense } from "react";
 
 import { formatLongDate, formatTime, WEEKDAY_NAMES } from "@/lib/format";
 import { loadAdminCatalogue } from "@/server/admin/catalogue-admin";
-import { requireAdmin } from "@/server/admin/session";
+import { requireAdminPage } from "@/server/admin/session";
 import { localDate } from "@/server/booking/availability";
 import { getDb } from "@/server/db/client";
 
@@ -24,7 +24,7 @@ export default function SchedulePage() {
 }
 
 async function ScheduleEditor() {
-  await requireAdmin();
+  await requireAdminPage();
   const { settings, barbers, timeOff } = await loadAdminCatalogue(getDb());
   const tz = settings.timezone;
   const today = localDate(new Date(), tz);

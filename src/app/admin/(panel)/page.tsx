@@ -5,7 +5,7 @@ import { Suspense } from "react";
 import { addDays } from "@/lib/calendar";
 import { formatCalendarDate, formatTime } from "@/lib/format";
 import { loadAdminCatalogue, loadAgenda, loadTimeOffForDay } from "@/server/admin/catalogue-admin";
-import { requireAdmin } from "@/server/admin/session";
+import { requireAdminPage } from "@/server/admin/session";
 import { dayBounds, isoWeekday, localDate } from "@/server/booking/availability";
 import { getDb } from "@/server/db/client";
 
@@ -34,7 +34,7 @@ export default function AgendaPage({ searchParams }: PageProps<"/admin">) {
 }
 
 async function Agenda({ searchParams }: { searchParams: PageProps<"/admin">["searchParams"] }) {
-  await requireAdmin();
+  await requireAdminPage();
   const db = getDb();
   const { settings, barbers } = await loadAdminCatalogue(db);
   const tz = settings.timezone;

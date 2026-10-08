@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 
 import { loadAdminCatalogue } from "@/server/admin/catalogue-admin";
-import { requireAdmin } from "@/server/admin/session";
+import { requireAdminPage } from "@/server/admin/session";
 import { getDb } from "@/server/db/client";
 
 import { saveServiceAction } from "../../actions";
@@ -28,7 +28,7 @@ export default function ServicesPage() {
 }
 
 async function ServiceList() {
-  await requireAdmin();
+  await requireAdminPage();
   const { services } = await loadAdminCatalogue(getDb());
   return (
     <div className="grid gap-4">

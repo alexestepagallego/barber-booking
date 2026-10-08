@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 
 import { loadAdminCatalogue } from "@/server/admin/catalogue-admin";
-import { requireAdmin } from "@/server/admin/session";
+import { requireAdminPage } from "@/server/admin/session";
 import { localDate } from "@/server/booking/availability";
 import { getDb } from "@/server/db/client";
 
@@ -28,7 +28,7 @@ export default function NewBookingPage() {
 }
 
 async function Loader() {
-  await requireAdmin();
+  await requireAdminPage();
   const { settings, services, barbers } = await loadAdminCatalogue(getDb());
   return (
     <StaffBookingForm

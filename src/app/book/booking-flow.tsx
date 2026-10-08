@@ -216,6 +216,7 @@ export function BookingFlow({ catalogue, today }: { catalogue: Catalogue; today:
 
       <Step number={3} title="Day" disabled={!barberChoice}>
         <DayPicker
+          disabled={!barberChoice}
           today={today}
           horizonDays={shop.bookingHorizonDays}
           closedWeekdays={closedWeekdays}

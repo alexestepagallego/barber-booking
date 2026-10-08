@@ -132,22 +132,32 @@ export function ChoiceGroup({
   label,
   columns = 2,
   scroll = false,
+  disabled = false,
   children,
 }: {
   label: string;
   columns?: 2 | 3 | 4;
   scroll?: boolean;
+  /** A disabled scrolling strip is clipped instead of scrollable: nothing in it can be reached anyway. */
+  disabled?: boolean;
   children: React.ReactNode;
 }) {
   const layout = scroll
-    ? "flex gap-2 overflow-x-auto pb-2 snap-x"
+    ? `flex gap-2 pb-2 snap-x ${disabled ? "overflow-hidden" : "overflow-x-auto"}`
     : {
         2: "grid gap-2 sm:grid-cols-2",
         3: "grid gap-2 grid-cols-2 sm:grid-cols-3",
         4: "grid gap-2 grid-cols-3 sm:grid-cols-4",
       }[columns];
   return (
-    <div role="radiogroup" aria-label={label} className={layout}>
+    <div
+      role="radiogroup"
+      aria-label={label}
+      className={layout}
+      // A horizontally scrolling strip must be reachable by keyboard
+      // (WCAG 2.1.1, axe scrollable-region-focusable).
+      tabIndex={scroll && !disabled ? 0 : undefined}
+    >
       {children}
     </div>
   );
@@ -172,9 +182,12 @@ export function Choice({
   subtitle?: string;
   compact?: boolean;
 }) {
+  // `relative` contains the visually hidden (absolutely positioned) radio.
+  // Without it, the radios of a horizontally scrolling strip escape the
+  // scroll container, widen the document and make mobile browsers zoom out.
   return (
     <label
-      className={`border-border hover:border-foreground has-checked:bg-foreground has-checked:text-background has-checked:border-foreground flex shrink-0 cursor-pointer snap-start flex-col border transition-colors has-focus-visible:outline has-disabled:pointer-events-none has-disabled:opacity-30 ${
+      className={`border-border hover:border-foreground has-checked:bg-foreground has-checked:text-background has-checked:border-foreground relative flex shrink-0 cursor-pointer snap-start flex-col border transition-colors has-focus-visible:outline has-disabled:pointer-events-none has-disabled:opacity-30 ${
         compact ? "items-center px-3 py-3 text-center" : "px-5 py-4"
       }`}
     >
@@ -245,19 +258,21 @@ export function DayPicker({
   closedWeekdays,
   value,
   onChange,
+  disabled = false,
 }: {
   today: string;
   horizonDays: number;
   closedWeekdays: ReadonlySet<number>;
   value: string | null;
   onChange: (date: string | null) => void;
+  disabled?: boolean;
 }) {
   const days = Array.from({ length: Math.min(VISIBLE_DAYS, horizonDays + 1) }, (_, i) =>
     addDays(today, i),
   );
   return (
     <>
-      <ChoiceGroup label="Day" scroll>
+      <ChoiceGroup label="Day" scroll disabled={disabled}>
         {days.map((day) => (
           <Choice
             key={day}

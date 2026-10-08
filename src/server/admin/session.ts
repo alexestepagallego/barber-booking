@@ -2,6 +2,7 @@ import "server-only";
 
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { cache } from "react";
 
 import { getDb } from "@/server/db/client";
@@ -40,6 +41,15 @@ export async function requireAdmin(): Promise<AdminIdentity> {
   const admin = await getAdmin();
   if (!admin) redirect("/admin/login");
   return admin;
+}
+
+/**
+ * For admin pages: marks the render as request-time first (the pages read
+ * the clock and live data), then checks the session.
+ */
+export async function requireAdminPage(): Promise<AdminIdentity> {
+  await connection();
+  return requireAdmin();
 }
 
 /** Only callable from a Server Action or route handler (cookies can't be set during render). */

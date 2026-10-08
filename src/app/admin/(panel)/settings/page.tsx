@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 
 import { loadAdminCatalogue } from "@/server/admin/catalogue-admin";
-import { requireAdmin } from "@/server/admin/session";
+import { requireAdminPage } from "@/server/admin/session";
 import { getDb } from "@/server/db/client";
 
 import { saveSettingsAction } from "../../actions";
@@ -22,7 +22,7 @@ export default function SettingsPage() {
 }
 
 async function SettingsForm() {
-  await requireAdmin();
+  await requireAdminPage();
   const { settings } = await loadAdminCatalogue(getDb());
   return (
     <ActionForm action={saveSettingsAction} className="grid gap-6">

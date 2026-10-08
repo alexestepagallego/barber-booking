@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 
 import { loadAdminCatalogue } from "@/server/admin/catalogue-admin";
-import { requireAdmin } from "@/server/admin/session";
+import { requireAdminPage } from "@/server/admin/session";
 import { getDb } from "@/server/db/client";
 
 import { saveBarberAction } from "../../actions";
@@ -32,7 +32,7 @@ export default function BarbersPage() {
 }
 
 async function BarberList() {
-  await requireAdmin();
+  await requireAdminPage();
   const { barbers, services } = await loadAdminCatalogue(getDb());
   const serviceOptions = services.map((s) => ({ id: s.id, name: s.name, active: s.active }));
   return (

@@ -28,7 +28,9 @@ export function contentSecurityPolicy(dev: boolean): string {
     "base-uri": ["'self'"],
     "form-action": ["'self'"],
     "frame-ancestors": ["'none'"],
-    ...(dev ? {} : { "upgrade-insecure-requests": [] }),
+    // No upgrade-insecure-requests: HSTS already forces HTTPS in production,
+    // and the directive would break production builds served on localhost
+    // (the E2E tests).
   };
   return Object.entries(directives)
     .map(([name, values]) => [name, ...values].join(" "))
@@ -54,11 +56,18 @@ export function securityHeaders(dev: boolean): Header[] {
   ];
 }
 
-/**
- * Pages whose URL is a secret (manage links) or that are staff-only: never
- * send the URL in Referer, never index them.
- */
-export const privatePageHeaders: Header[] = [
+/** Pages whose URL is a secret (manage links): never send it in Referer, never index. */
+export const secretUrlHeaders: Header[] = [
   { key: "Referrer-Policy", value: "no-referrer" },
+  { key: "X-Robots-Tag", value: "noindex, nofollow" },
+];
+
+/**
+ * Staff-only pages: not indexed, and no referrer to other sites. Same-origin
+ * referrers are kept, because with `no-referrer` browsers send `Origin: null`
+ * on form posts, which breaks same-origin checks.
+ */
+export const staffPageHeaders: Header[] = [
+  { key: "Referrer-Policy", value: "same-origin" },
   { key: "X-Robots-Tag", value: "noindex, nofollow" },
 ];
