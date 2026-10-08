@@ -37,7 +37,6 @@ async function book(time = "10:00", barberId: string = chane) {
     db,
     {
       ...customer,
-      privacyAccepted: true,
       serviceId: cut,
       barberId,
       startsAt: local(time),

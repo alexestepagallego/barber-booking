@@ -229,3 +229,56 @@ export type Barber = typeof barbers.$inferSelect;
 export type Service = typeof services.$inferSelect;
 export type Appointment = typeof appointments.$inferSelect;
 export type NewAppointment = typeof appointments.$inferInsert;
+
+/** Staff who can sign in to /admin. Created from the CLI (npm run admin:create), never via sign-up. */
+export const adminUsers = pgTable(
+  "admin_users",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    /** Always stored lower-cased. */
+    email: text().notNull(),
+    name: text().notNull(),
+    /** argon2id hash (PHC string), never the password. */
+    passwordHash: text().notNull(),
+    lastLoginAt: timestamp({ withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    unique("admin_users_email_unique").on(t.email),
+    check("admin_users_email_lowercase", sql`${t.email} = lower(${t.email})`),
+  ],
+);
+
+/**
+ * Server-side sessions. The cookie holds a random 256-bit token; this table
+ * stores only its SHA-256, so a database leak does not leak live sessions.
+ * Logging out (or deleting the row) revokes a session immediately.
+ */
+export const adminSessions = pgTable(
+  "admin_sessions",
+  {
+    tokenHash: text().primaryKey(),
+    adminUserId: uuid()
+      .notNull()
+      .references(() => adminUsers.id, { onDelete: "cascade" }),
+    expiresAt: timestamp({ withTimezone: true }).notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("admin_sessions_user_idx").on(t.adminUserId)],
+);
+
+/**
+ * Fixed-window rate-limit counters, shared by every app instance.
+ * `key` combines the rule and the subject, e.g. "booking:ip:203.0.113.7".
+ */
+export const rateLimits = pgTable(
+  "rate_limits",
+  {
+    key: text().primaryKey(),
+    count: integer().notNull(),
+    resetAt: timestamp({ withTimezone: true }).notNull(),
+  },
+  (t) => [index("rate_limits_reset_at_idx").on(t.resetAt)],
+);
+
+export type AdminUser = typeof adminUsers.$inferSelect;

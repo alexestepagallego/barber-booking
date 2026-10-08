@@ -16,8 +16,10 @@ import { formatDuration, formatLongDate, formatPrice, formatTime } from "@/lib/f
 
 /**
  * Transactional emails, written with React Email so they render reliably in
- * mail clients (tables and inline styles under the hood). Every email has a
- * plain-text version as well.
+ * mail clients (tables and inline styles under the hood). Every email also
+ * has a plain-text version, which must make sense without any styling.
+ * React escapes all interpolated values, so customer-provided text cannot
+ * inject markup.
  */
 
 export type EmailAppointment = {
@@ -48,37 +50,48 @@ export type EmailProps = {
   /** Rescheduled emails show where the appointment came from. */
   previousStartsAt?: Date;
   cancellationCutoffMinutes: number;
+  /** Whether the customer can still change or cancel online when the email is sent. */
+  canModify: boolean;
+  /** "today"/"tomorrow" relative to the send time, for reminder wording. */
+  relativeDay?: "today" | "tomorrow";
 };
 
-const COPY: Record<
-  Kind,
-  { subject: (shop: string) => string; heading: string; intro: string; action: string }
-> = {
-  confirmed: {
-    subject: (shop) => `Your appointment at ${shop} is confirmed`,
-    heading: "You're booked",
-    intro: "Thanks for booking with us. Here are the details of your appointment.",
-    action: "Manage or cancel",
-  },
-  rescheduled: {
-    subject: (shop) => `Your appointment at ${shop} has moved`,
-    heading: "New time confirmed",
-    intro: "Your appointment has been moved. This is the new time.",
-    action: "Manage or cancel",
-  },
-  cancelled: {
-    subject: (shop) => `Your appointment at ${shop} was cancelled`,
-    heading: "Appointment cancelled",
-    intro: "This appointment has been cancelled and the time released. We hope to see you soon.",
-    action: "Book another time",
-  },
-  reminder: {
-    subject: (shop) => `See you tomorrow at ${shop}`,
-    heading: "See you tomorrow",
-    intro: "A quick reminder of your appointment.",
-    action: "Can't make it? Manage or cancel",
-  },
-};
+function copyFor({ kind, shop, relativeDay, canModify }: EmailProps) {
+  const manage = canModify ? "Manage or cancel" : "View appointment";
+  switch (kind) {
+    case "confirmed":
+      return {
+        subject: `Your appointment at ${shop.name} is confirmed`,
+        heading: "You're booked",
+        intro: "thanks for booking with us. Here are the details of your appointment.",
+        action: manage,
+      };
+    case "rescheduled":
+      return {
+        subject: `Your appointment at ${shop.name} has moved`,
+        heading: "New time confirmed",
+        intro: "your appointment has been moved. Here is the new time.",
+        action: manage,
+      };
+    case "cancelled":
+      return {
+        subject: `Your appointment at ${shop.name} was cancelled`,
+        heading: "Appointment cancelled",
+        intro:
+          "this appointment has been cancelled and the time released. We hope to see you soon.",
+        action: "Book another time",
+      };
+    case "reminder":
+      return {
+        subject: relativeDay
+          ? `See you ${relativeDay} at ${shop.name}`
+          : `Reminder: your appointment at ${shop.name}`,
+        heading: relativeDay ? `See you ${relativeDay}` : "See you soon",
+        intro: "a quick reminder of your appointment.",
+        action: canModify ? "Can't make it? Manage or cancel" : "View appointment",
+      };
+  }
+}
 
 const styles = {
   body: { backgroundColor: "#f4f4f4", fontFamily: "Helvetica, Arial, sans-serif", margin: 0 },
@@ -120,17 +133,12 @@ function when(date: Date, timezone: string) {
   return `${formatLongDate(date, timezone)}, ${formatTime(date, timezone)}`;
 }
 
-export function AppointmentEmail({
-  kind,
-  appointment: a,
-  shop,
-  actionUrl,
-  previousStartsAt,
-  cancellationCutoffMinutes,
-}: EmailProps) {
-  const copy = COPY[kind];
+export function AppointmentEmail(props: EmailProps) {
+  const { kind, appointment: a, shop, actionUrl, previousStartsAt, canModify } = props;
+  const copy = copyFor(props);
   const firstName = a.customerName.split(" ")[0];
-  const cutoffHours = Math.round(cancellationCutoffMinutes / 60);
+  const cutoff = formatDuration(props.cancellationCutoffMinutes);
+  const range = `${when(a.startsAt, shop.timezone)}–${formatTime(a.endsAt, shop.timezone)}`;
 
   return (
     <Html lang="en">
@@ -146,7 +154,7 @@ export function AppointmentEmail({
               {copy.heading}
             </Heading>
             <Text style={styles.text}>
-              Hi {firstName}, {copy.intro.charAt(0).toLowerCase() + copy.intro.slice(1)}
+              Hi {firstName}, {copy.intro}
             </Text>
 
             <Text style={styles.label}>Service</Text>
@@ -154,12 +162,17 @@ export function AppointmentEmail({
               {a.serviceName} · {formatDuration(a.durationMinutes)} · {formatPrice(a.priceCents)}
             </Text>
             <Text style={styles.label}>When</Text>
-            {previousStartsAt && (
-              <Text style={styles.struck}>{when(previousStartsAt, shop.timezone)}</Text>
+            {previousStartsAt ? (
+              <>
+                {/* Words, not only strike-through: plain-text clients and screen readers. */}
+                <Text style={styles.struck}>Was: {when(previousStartsAt, shop.timezone)}</Text>
+                <Text style={styles.value}>Now: {range}</Text>
+              </>
+            ) : (
+              <Text style={kind === "cancelled" ? styles.struck : styles.value}>
+                {kind === "cancelled" ? `Cancelled: ${range}` : range}
+              </Text>
             )}
-            <Text style={kind === "cancelled" ? styles.struck : styles.value}>
-              {when(a.startsAt, shop.timezone)}–{formatTime(a.endsAt, shop.timezone)}
-            </Text>
             <Text style={styles.label}>Barber</Text>
             <Text style={styles.value}>{a.barberName}</Text>
             {shop.address && (
@@ -176,8 +189,10 @@ export function AppointmentEmail({
             </Section>
             {kind !== "cancelled" && (
               <Text style={{ ...styles.footer, margin: "12px 0 0" }}>
-                You can change or cancel online until {cutoffHours} h before the appointment. The
-                attached invite adds it to your calendar.
+                {canModify
+                  ? `You can change or cancel online until ${cutoff} before the appointment.`
+                  : `Online changes close ${cutoff} before the appointment${shop.phone ? `; to change it now, call ${shop.phone}` : ""}.`}{" "}
+                The attached invite adds it to your calendar.
               </Text>
             )}
           </Section>
@@ -189,8 +204,8 @@ export function AppointmentEmail({
               {shop.address ? ` · ${shop.address}` : ""}
             </Text>
             <Text style={styles.footer}>
-              You received this email because you booked an appointment. Keep it private: its link
-              lets anyone manage the booking.
+              You received this email because of an appointment booked at {shop.name}.
+              {kind !== "cancelled" && " Keep it private: its link lets anyone manage the booking."}
             </Text>
           </Section>
         </Container>
@@ -202,5 +217,5 @@ export function AppointmentEmail({
 export async function renderAppointmentEmail(props: EmailProps) {
   const element = <AppointmentEmail {...props} />;
   const [html, text] = await Promise.all([render(element), render(element, { plainText: true })]);
-  return { subject: COPY[props.kind].subject(props.shop.name), html, text };
+  return { subject: copyFor(props).subject, html, text };
 }

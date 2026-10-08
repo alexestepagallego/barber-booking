@@ -30,7 +30,8 @@ export function createTestDb(max = 60) {
 export async function resetDatabase(db: Db) {
   await db.execute(sql`
     TRUNCATE appointment_events, appointments, time_off, working_hours,
-             barber_services, barbers, services, shop_settings
+             barber_services, barbers, services, shop_settings,
+             admin_sessions, admin_users, rate_limits
     RESTART IDENTITY CASCADE
   `);
   return seedDatabase(db);

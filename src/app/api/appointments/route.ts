@@ -5,7 +5,8 @@ import { createBookingSchema, type BookingConfirmationDto } from "@/lib/booking-
 import { createBooking } from "@/server/booking/create-booking";
 import { getDb } from "@/server/db/client";
 import { notifyBookingConfirmed } from "@/server/email/notifications";
-import { apiError, handleApiError } from "@/server/http/api-response";
+import { apiError, handleApiError, rateLimited } from "@/server/http/api-response";
+import { clientIp, RATE_LIMITS } from "@/server/security/rate-limit";
 
 const idempotencyKeySchema = z.uuid().optional();
 
@@ -37,6 +38,13 @@ export async function POST(request: Request) {
       return apiError(400, "validation_error", "Request body must be valid JSON");
     }
     const input = createBookingSchema.parse(json);
+
+    // Per IP (one client, many bookings) and per recipient address (stops
+    // the form being used to flood someone's inbox with confirmations).
+    const limited =
+      (await rateLimited(RATE_LIMITS.bookingPerIp, clientIp(request.headers))) ??
+      (await rateLimited(RATE_LIMITS.bookingPerEmail, input.customerEmail));
+    if (limited) return limited;
 
     const db = getDb();
     const result = await createBooking(db, input, { idempotencyKey: idempotencyKey.data });

@@ -12,7 +12,14 @@ export const availabilityQuerySchema = z.object({
 });
 
 export const customerDetailsSchema = z.object({
-  customerName: z.string().trim().min(2, "Please enter your name").max(80, "Name is too long"),
+  // Letters (any script), spaces and the punctuation real names use. This
+  // also keeps URLs out of the greeting of emails sent to the address given.
+  customerName: z
+    .string()
+    .trim()
+    .min(2, "Please enter your name")
+    .max(80, "Name is too long")
+    .regex(/^[\p{L}\p{M}][\p{L}\p{M}'’ .-]*$/u, "Please use letters only"),
   // Trim before validating: mobile autocomplete often appends a space.
   customerEmail: z
     .string()
@@ -89,4 +96,6 @@ export type ManageAppointmentDto = {
   customerName: string;
   canModify: boolean;
   modifiableUntil: string;
+  /** Same SEQUENCE the emailed invites use, for the "Add to calendar" download. */
+  calendarSequence: number;
 };

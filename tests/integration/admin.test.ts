@@ -1,0 +1,236 @@
+import { eq } from "drizzle-orm";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
+
+import {
+  createAdminUser,
+  createSession,
+  deleteSession,
+  findSession,
+  purgeExpiredSessions,
+  SESSION_TTL_MS,
+  verifyCredentials,
+} from "@/server/admin/auth";
+import {
+  addTimeOff,
+  saveBarber,
+  saveService,
+  saveWeekSchedule,
+} from "@/server/admin/catalogue-admin";
+import { zonedDateTime } from "@/server/booking/availability";
+import { createBooking } from "@/server/booking/create-booking";
+import { getAvailability } from "@/server/booking/get-availability";
+import { adminSessions, adminUsers, barberServices, services } from "@/server/db/schema";
+import { checkRateLimit, purgeExpiredRateLimits } from "@/server/security/rate-limit";
+import { hashToken } from "@/server/security/tokens";
+
+import { createTestDb, customer, resetDatabase } from "./test-db";
+
+const { db, client } = createTestDb(10);
+const PASSWORD = "correct horse battery staple";
+const MONDAY = "2030-06-03";
+const now = new Date("2030-06-01T10:00:00Z");
+const local = (time: string, date = MONDAY) => zonedDateTime(date, time, "Europe/Madrid");
+
+let seeded: Awaited<ReturnType<typeof resetDatabase>>;
+
+beforeEach(async () => {
+  seeded = await resetDatabase(db);
+});
+
+afterAll(() => client.end());
+
+describe("admin authentication", () => {
+  it("stores an argon2id hash, never the password, and normalises the email", async () => {
+    await createAdminUser(db, { email: "  Owner@Example.COM ", name: "Owner", password: PASSWORD });
+    const [user] = await db.select().from(adminUsers);
+
+    expect(user?.email).toBe("owner@example.com");
+    expect(user?.passwordHash).toMatch(/^\$argon2id\$/);
+    expect(user?.passwordHash).not.toContain(PASSWORD);
+  });
+
+  it("rejects short passwords", async () => {
+    await expect(
+      createAdminUser(db, { email: "a@example.com", name: "A", password: "short" }),
+    ).rejects.toThrow(/12 characters/);
+  });
+
+  it("verifies credentials, case-insensitively for the email only", async () => {
+    await createAdminUser(db, { email: "owner@example.com", name: "Owner", password: PASSWORD });
+
+    expect(await verifyCredentials(db, "OWNER@example.com", PASSWORD)).toMatchObject({
+      email: "owner@example.com",
+    });
+    expect(
+      await verifyCredentials(db, "owner@example.com", PASSWORD.toUpperCase()),
+    ).toBeUndefined();
+    expect(await verifyCredentials(db, "nobody@example.com", PASSWORD)).toBeUndefined();
+  });
+
+  it("creates sessions that are stored hashed, expire and can be revoked", async () => {
+    const admin = await createAdminUser(db, {
+      email: "owner@example.com",
+      name: "Owner",
+      password: PASSWORD,
+    });
+    const { token } = await createSession(db, admin.id, now);
+
+    const [row] = await db.select().from(adminSessions);
+    expect(row?.tokenHash).toBe(hashToken(token));
+    expect(await findSession(db, token, now)).toMatchObject({ id: admin.id });
+    expect(await findSession(db, "forged-token", now)).toBeUndefined();
+
+    const afterExpiry = new Date(now.getTime() + SESSION_TTL_MS + 1);
+    expect(await findSession(db, token, afterExpiry)).toBeUndefined();
+    expect(await purgeExpiredSessions(db, afterExpiry)).toBe(1);
+
+    const second = await createSession(db, admin.id, now);
+    await deleteSession(db, second.token);
+    expect(await findSession(db, second.token, now)).toBeUndefined();
+  });
+
+  it("signs out every session when the password changes", async () => {
+    const admin = await createAdminUser(db, {
+      email: "owner@example.com",
+      name: "Owner",
+      password: PASSWORD,
+    });
+    const { token } = await createSession(db, admin.id, now);
+    await createAdminUser(db, {
+      email: "owner@example.com",
+      name: "Owner",
+      password: `${PASSWORD}!`,
+    });
+
+    expect(await findSession(db, token, now)).toBeUndefined();
+  });
+});
+
+describe("rate limiting", () => {
+  const rule = { name: "test", limit: 3, windowSeconds: 60 };
+
+  it("allows up to the limit within a window, then blocks until it resets", async () => {
+    const results = [];
+    for (let i = 0; i < 4; i++) results.push(await checkRateLimit(db, rule, "ip-1", now));
+    expect(results.map((r) => r.allowed)).toEqual([true, true, true, false]);
+    expect(results[3]?.retryAfter).toBe(60);
+
+    // Other subjects have their own counter.
+    expect((await checkRateLimit(db, rule, "ip-2", now)).allowed).toBe(true);
+
+    const nextWindow = new Date(now.getTime() + 61_000);
+    expect(await checkRateLimit(db, rule, "ip-1", nextWindow)).toMatchObject({
+      allowed: true,
+      remaining: 2,
+    });
+  });
+
+  it("counts exactly under concurrency (no lost updates)", async () => {
+    const results = await Promise.all(
+      Array.from({ length: 20 }, () => checkRateLimit(db, { ...rule, limit: 5 }, "burst", now)),
+    );
+    expect(results.filter((r) => r.allowed)).toHaveLength(5);
+  });
+
+  it("purges expired counters", async () => {
+    await checkRateLimit(db, rule, "old", now);
+    expect(await purgeExpiredRateLimits(db, new Date(now.getTime() + 120_000))).toBe(1);
+  });
+});
+
+describe("catalogue administration", () => {
+  const chane = () => seeded.barbers.find((b) => b.slug === "chane")!.id;
+  const cut = () => seeded.services.find((s) => s.slug === "classic-cut")!.id;
+
+  it("creates a service with a unique slug, offered by every active barber", async () => {
+    const id = await saveService(db, {
+      name: "Classic cut",
+      durationMinutes: 25,
+      price: 14.5,
+      sortOrder: 9,
+      active: true,
+    });
+    const [row] = await db.select().from(services).where(eq(services.id, id));
+    expect(row).toMatchObject({ slug: "classic-cut-2", priceCents: 1450, durationMinutes: 25 });
+
+    const offered = await db.select().from(barberServices).where(eq(barberServices.serviceId, id));
+    expect(offered).toHaveLength(seeded.barbers.length);
+  });
+
+  it("deactivating a service hides it from availability", async () => {
+    await saveService(db, {
+      id: cut(),
+      name: "Classic cut",
+      durationMinutes: 30,
+      price: 15,
+      sortOrder: 1,
+      active: false,
+    });
+    await expect(getAvailability(db, { date: MONDAY, serviceId: cut(), now })).rejects.toThrow(
+      /not found/i,
+    );
+  });
+
+  it("updates which services a barber offers", async () => {
+    await saveBarber(db, {
+      id: chane(),
+      name: "Chane",
+      sortOrder: 1,
+      active: true,
+      serviceIds: [],
+    });
+    const slots = await getAvailability(db, { date: MONDAY, serviceId: cut(), now });
+    expect(slots.flatMap((s) => s.barberIds)).not.toContain(chane());
+  });
+
+  it("replaces a barber's weekly schedule", async () => {
+    const days = Array.from({ length: 7 }, () => [] as { startTime: string; endTime: string }[]);
+    days[0] = [{ startTime: "10:00", endTime: "12:00" }]; // Monday only
+    await saveWeekSchedule(db, { barberId: chane(), days });
+
+    const slots = await getAvailability(db, {
+      date: MONDAY,
+      serviceId: cut(),
+      barberId: chane(),
+      now,
+    });
+    expect(slots[0]?.startsAt).toEqual(local("10:00"));
+    expect(slots.at(-1)?.startsAt).toEqual(local("11:30"));
+  });
+
+  it("adding time off blocks bookings and reports appointments it overlaps", async () => {
+    await createBooking(
+      db,
+      { ...customer, serviceId: cut(), barberId: chane(), startsAt: local("10:00") },
+      { now },
+    );
+    const conflicts = await addTimeOff(
+      db,
+      { barberId: chane(), startDate: MONDAY, endDate: MONDAY, reason: "Dentist" },
+      "Europe/Madrid",
+    );
+    expect(conflicts).toHaveLength(1);
+
+    const slots = await getAvailability(db, {
+      date: MONDAY,
+      serviceId: cut(),
+      barberId: chane(),
+      now,
+    });
+    expect(slots).toEqual([]);
+  });
+
+  it("staff bookings skip the minimum notice but still cannot overlap", async () => {
+    const soon = local("10:00");
+    const fiveMinutesBefore = new Date(soon.getTime() - 5 * 60_000);
+    const input = { ...customer, serviceId: cut(), barberId: chane(), startsAt: soon };
+
+    await expect(createBooking(db, input, { now: fiveMinutesBefore })).rejects.toThrow();
+    await expect(
+      createBooking(db, input, { now: fiveMinutesBefore, actor: "admin" }),
+    ).resolves.toBeTruthy();
+    await expect(
+      createBooking(db, input, { now: fiveMinutesBefore, actor: "admin" }),
+    ).rejects.toThrow(/no longer available/);
+  });
+});

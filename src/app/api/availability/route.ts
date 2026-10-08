@@ -2,7 +2,8 @@ import type { AvailabilityResponse } from "@/lib/booking-schema";
 import { availabilityQuerySchema } from "@/lib/booking-schema";
 import { getAvailability } from "@/server/booking/get-availability";
 import { getDb } from "@/server/db/client";
-import { handleApiError } from "@/server/http/api-response";
+import { handleApiError, rateLimited } from "@/server/http/api-response";
+import { clientIp, RATE_LIMITS } from "@/server/security/rate-limit";
 
 /**
  * GET /api/availability?date=YYYY-MM-DD&serviceId=…[&barberId=…]
@@ -12,6 +13,9 @@ import { handleApiError } from "@/server/http/api-response";
  */
 export async function GET(request: Request) {
   try {
+    const limited = await rateLimited(RATE_LIMITS.availabilityPerIp, clientIp(request.headers));
+    if (limited) return limited;
+
     const params = Object.fromEntries(new URL(request.url).searchParams);
     const query = availabilityQuerySchema.parse(params);
 

@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import type { Db } from "@/server/db/client";
 import { isConstraintViolation, PG_ERROR } from "@/server/db/errors";
@@ -42,6 +42,12 @@ export type AppointmentDetails = {
   modifiableUntil: Date;
   /** True when a customer can still cancel or reschedule right now. */
   canModify: boolean;
+  /**
+   * iCalendar SEQUENCE of the latest version of this appointment: one more
+   * per reschedule, plus one when cancelled. Every invite (emails and the
+   * "Add to calendar" download) uses it, so calendar apps apply updates.
+   */
+  calendarSequence: number;
 };
 
 async function loadDetails(
@@ -58,6 +64,11 @@ async function loadDetails(
       priceCents: services.priceCents,
       timezone: shopSettings.timezone,
       cutoff: shopSettings.cancellationCutoffMinutes,
+      reschedules: sql<number>`(
+        SELECT count(*)::int FROM ${appointmentEvents}
+        WHERE ${appointmentEvents.appointmentId} = ${appointments.id}
+          AND ${appointmentEvents.type} = 'rescheduled'
+      )`,
     })
     .from(appointments)
     .innerJoin(barbers, eq(barbers.id, appointments.barberId))
@@ -89,6 +100,7 @@ async function loadDetails(
     timezone: row.timezone,
     modifiableUntil,
     canModify: a.status === "confirmed" && now < modifiableUntil,
+    calendarSequence: row.reschedules + (a.status === "cancelled" ? 1 : 0),
   };
 }
 
@@ -139,6 +151,7 @@ export async function cancelAppointment(
           eq(appointments.id, id),
           eq(appointments.status, "confirmed"),
           eq(appointments.startsAt, details.startsAt),
+          eq(appointments.barberId, details.barberId),
         ),
       )
       .returning({ id: appointments.id });
@@ -154,7 +167,12 @@ export async function cancelAppointment(
   });
   if (!cancelled) throw new NotModifiableError("changed");
 
-  return { ...details, status: "cancelled", canModify: false };
+  return {
+    ...details,
+    status: "cancelled",
+    canModify: false,
+    calendarSequence: details.calendarSequence + 1,
+  };
 }
 
 /**
@@ -217,7 +235,11 @@ export async function rescheduleAppointment(
             and(
               eq(appointments.id, id),
               eq(appointments.status, "confirmed"),
+              // Compare everything this change was based on: a concurrent
+              // move to another barber at the same time must not be
+              // silently overwritten (lost update).
               eq(appointments.startsAt, before.startsAt),
+              eq(appointments.barberId, before.barberId),
             ),
           )
           .returning({ id: appointments.id });
@@ -270,7 +292,14 @@ export async function markAppointmentOutcome(
     const [row] = await tx
       .update(appointments)
       .set({ status: outcome })
-      .where(and(eq(appointments.id, id), eq(appointments.status, "confirmed")))
+      .where(
+        and(
+          eq(appointments.id, id),
+          eq(appointments.status, "confirmed"),
+          // A reschedule may have moved it into the future in the meantime.
+          eq(appointments.startsAt, details.startsAt),
+        ),
+      )
       .returning({ id: appointments.id });
     if (!row) throw new NotModifiableError("changed");
     await tx.insert(appointmentEvents).values({ appointmentId: id, type: outcome, actor: "admin" });

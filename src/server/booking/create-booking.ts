@@ -34,15 +34,19 @@ export type CreateBookingResult = InsertResult & {
  * first. If another request wins one of them in the meantime, the next one
  * is tried.
  *
+ * Staff bookings (actor "admin") skip the minimum notice and use a longer
+ * horizon, but the overlap guarantee is exactly the same.
+ *
  * A retried request (same idempotency key) is answered with the original
  * booking before any availability check, because by then its own
  * appointment makes the slot look taken.
  */
 export async function createBooking(
   db: Db,
-  input: CreateBookingInput,
-  options: { idempotencyKey?: string; now?: Date } = {},
+  input: Omit<CreateBookingInput, "privacyAccepted">,
+  options: { idempotencyKey?: string; now?: Date; actor?: "customer" | "admin" } = {},
 ): Promise<CreateBookingResult> {
+  const actor = options.actor ?? "customer";
   if (options.idempotencyKey) {
     const existing = await findAppointmentByIdempotencyKey(db, options.idempotencyKey);
     if (existing)
@@ -61,6 +65,8 @@ export async function createBooking(
     serviceId: input.serviceId,
     barberId: input.barberId ?? undefined,
     now: options.now,
+    // Staff can book walk-ins for right now and further ahead.
+    policy: actor === "admin" ? "staff" : "customer",
   });
   const slot = slots.find((s) => s.startsAt.getTime() === input.startsAt.getTime());
   if (!slot) throw new SlotUnavailableError();
@@ -73,7 +79,7 @@ export async function createBooking(
     startsAt: slot.startsAt,
     endsAt: slot.endsAt,
     idempotencyKey: options.idempotencyKey,
-    actor: "customer" as const,
+    actor,
   };
 
   const result = input.barberId

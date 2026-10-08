@@ -3,8 +3,9 @@ import { after } from "next/server";
 import { cancelAppointment } from "@/server/booking/manage-appointment";
 import { getDb } from "@/server/db/client";
 import { notifyCancelled } from "@/server/email/notifications";
-import { handleApiError } from "@/server/http/api-response";
+import { handleApiError, rateLimited } from "@/server/http/api-response";
 import { appointmentFromBearer, NO_STORE, toManageDto } from "@/server/http/manage-auth";
+import { clientIp, RATE_LIMITS } from "@/server/security/rate-limit";
 
 /**
  * POST /api/manage/cancel
@@ -15,6 +16,9 @@ import { appointmentFromBearer, NO_STORE, toManageDto } from "@/server/http/mana
  */
 export async function POST(request: Request) {
   try {
+    const limited = await rateLimited(RATE_LIMITS.manageWritePerIp, clientIp(request.headers));
+    if (limited) return limited;
+
     const appointment = await appointmentFromBearer(request);
     const db = getDb();
     const cancelled = await cancelAppointment(db, appointment.id, { actor: "customer" });

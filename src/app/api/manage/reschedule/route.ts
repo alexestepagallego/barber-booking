@@ -4,8 +4,9 @@ import { rescheduleSchema } from "@/lib/booking-schema";
 import { rescheduleAppointment } from "@/server/booking/manage-appointment";
 import { getDb } from "@/server/db/client";
 import { notifyRescheduled } from "@/server/email/notifications";
-import { apiError, handleApiError } from "@/server/http/api-response";
+import { apiError, handleApiError, rateLimited } from "@/server/http/api-response";
 import { appointmentFromBearer, NO_STORE, toManageDto } from "@/server/http/manage-auth";
+import { clientIp, RATE_LIMITS } from "@/server/security/rate-limit";
 
 /**
  * POST /api/manage/reschedule   { "startsAt": "2026-10-08T17:00:00+02:00" }
@@ -16,6 +17,9 @@ import { appointmentFromBearer, NO_STORE, toManageDto } from "@/server/http/mana
  */
 export async function POST(request: Request) {
   try {
+    const limited = await rateLimited(RATE_LIMITS.manageWritePerIp, clientIp(request.headers));
+    if (limited) return limited;
+
     const appointment = await appointmentFromBearer(request);
 
     let json: unknown;

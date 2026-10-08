@@ -3,6 +3,9 @@ import { z } from "zod";
 
 import type { ApiErrorDto } from "@/lib/booking-schema";
 import { NotFoundError, NotModifiableError, SlotUnavailableError } from "@/server/booking/errors";
+import { getDb } from "@/server/db/client";
+import { describeError } from "@/server/log";
+import { checkRateLimit, type RateLimitRule } from "@/server/security/rate-limit";
 
 export function apiError(
   status: number,
@@ -43,6 +46,24 @@ export function handleApiError(error: unknown): Response {
   if (error instanceof NotModifiableError) {
     return apiError(409, "not_modifiable", error.message);
   }
-  console.error("Unhandled API error", error);
+  // Never log the raw error: database errors embed query parameters
+  // (customer name, email, phone) in their message.
+  console.error("Unhandled API error", describeError(error));
   return apiError(500, "internal_error", "Something went wrong. Please try again.");
+}
+
+/**
+ * Applies a rate limit and returns a 429 response when it is exceeded, or
+ * null to continue. Retry-After tells well-behaved clients when to come back.
+ */
+export async function rateLimited(rule: RateLimitRule, subject: string): Promise<Response | null> {
+  const result = await checkRateLimit(getDb(), rule, subject);
+  if (result.allowed) return null;
+  const response = apiError(
+    429,
+    "rate_limited",
+    "Too many requests. Please wait a moment and try again.",
+  );
+  response.headers.set("Retry-After", String(result.retryAfter));
+  return response;
 }

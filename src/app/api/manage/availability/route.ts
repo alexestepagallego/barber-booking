@@ -3,8 +3,9 @@ import { z } from "zod";
 import type { AvailabilityResponse } from "@/lib/booking-schema";
 import { getAvailability } from "@/server/booking/get-availability";
 import { getDb } from "@/server/db/client";
-import { handleApiError } from "@/server/http/api-response";
+import { handleApiError, rateLimited } from "@/server/http/api-response";
 import { appointmentFromBearer, NO_STORE } from "@/server/http/manage-auth";
+import { clientIp, RATE_LIMITS } from "@/server/security/rate-limit";
 
 const querySchema = z.object({ date: z.iso.date() });
 
@@ -17,6 +18,9 @@ const querySchema = z.object({ date: z.iso.date() });
  */
 export async function GET(request: Request) {
   try {
+    const limited = await rateLimited(RATE_LIMITS.availabilityPerIp, clientIp(request.headers));
+    if (limited) return limited;
+
     const { date } = querySchema.parse(Object.fromEntries(new URL(request.url).searchParams));
     const appointment = await appointmentFromBearer(request);
 

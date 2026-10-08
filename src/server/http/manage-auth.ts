@@ -40,6 +40,7 @@ export function toManageDto(details: AppointmentDetails): ManageAppointmentDto {
     customerName: details.customerName,
     canModify: details.canModify,
     modifiableUntil: details.modifiableUntil.toISOString(),
+    calendarSequence: details.calendarSequence,
   };
 }
 
