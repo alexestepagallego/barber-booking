@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   DayPicker,
@@ -26,6 +26,9 @@ const STATUS_LABEL: Record<ManageAppointmentDto["status"], string> = {
   no_show: "Missed",
 };
 
+const linkButton =
+  "text-muted hover:text-foreground text-xs tracking-[0.2em] uppercase underline-offset-4 hover:underline disabled:opacity-50";
+
 export function ManageBooking({
   token,
   initial,
@@ -47,7 +50,24 @@ export function ManageBooking({
   const [notice, setNotice] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Focus management: opening a section moves focus to its heading, and
+  // closing it returns focus to the button that opened it, so keyboard and
+  // screen-reader users never end up on <body>.
   const statusRef = useRef<HTMLParagraphElement>(null);
+  const cancelHeadingRef = useRef<HTMLHeadingElement>(null);
+  const rescheduleHeadingRef = useRef<HTMLHeadingElement>(null);
+  const changeButtonRef = useRef<HTMLButtonElement>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
+  const returnFocusTo = useRef<"change" | "cancel" | "status" | null>(null);
+
+  useEffect(() => {
+    if (mode === "confirm-cancel") cancelHeadingRef.current?.focus();
+    else if (mode === "reschedule") rescheduleHeadingRef.current?.focus();
+    else if (returnFocusTo.current === "status") statusRef.current?.focus();
+    else if (returnFocusTo.current === "change") changeButtonRef.current?.focus();
+    else if (returnFocusTo.current === "cancel") cancelButtonRef.current?.focus();
+  }, [mode]);
 
   const auth = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
   const closed = useMemo(() => new Set(closedWeekdays), [closedWeekdays]);
@@ -60,6 +80,24 @@ export function ManageBooking({
 
   const tz = shop.timezone;
   const active = appointment.status === "confirmed";
+
+  function open(next: Mode, from: "change" | "cancel") {
+    setMessage(null);
+    returnFocusTo.current = from;
+    setMode(next);
+  }
+
+  function close() {
+    setMode("view");
+  }
+
+  function announce(text: string) {
+    setMessage(text);
+    returnFocusTo.current = "status";
+    setMode("view");
+    // Also when the mode was already "view".
+    requestAnimationFrame(() => statusRef.current?.focus());
+  }
 
   async function call(path: string, body?: unknown) {
     setBusy(true);
@@ -88,12 +126,6 @@ export function ManageBooking({
     }
   }
 
-  function announce(text: string) {
-    setMessage(text);
-    setMode("view");
-    requestAnimationFrame(() => statusRef.current?.focus());
-  }
-
   async function cancel() {
     const result = await call("/api/manage/cancel");
     if (result.ok) return announce("Your appointment has been cancelled.");
@@ -103,6 +135,10 @@ export function ManageBooking({
 
   async function reschedule() {
     if (!slot) return;
+    if (slot.startsAt === appointment.startsAt) {
+      setNotice("That is already your appointment time. Choose a different one.");
+      return;
+    }
     const result = await call("/api/manage/reschedule", { startsAt: slot.startsAt });
     if (result.ok) {
       setSlot(null);
@@ -122,14 +158,15 @@ export function ManageBooking({
   function downloadCalendarInvite() {
     const ics = buildIcs({
       uid: `${appointment.id}@barber-booking`,
-      // The latest local state wins: clients replace older copies with the same UID.
-      sequence: Math.floor(Date.now() / 1000),
+      // The same SEQUENCE as the emailed invites, so later updates and
+      // cancellations sent by email still replace this copy.
+      sequence: appointment.calendarSequence,
       startsAt: new Date(appointment.startsAt),
       endsAt: new Date(appointment.endsAt),
       summary: `${appointment.serviceName} · ${shop.name}`,
       description: `With ${appointment.barberName}.\n${window.location.href}`,
       location: shop.address ?? shop.name,
-      status: active ? "confirmed" : "cancelled",
+      status: "confirmed",
     });
     const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar;charset=utf-8" }));
     const link = Object.assign(document.createElement("a"), {
@@ -137,7 +174,8 @@ export function ManageBooking({
       download: "chane-barber-appointment.ics",
     });
     link.click();
-    URL.revokeObjectURL(url);
+    // Give the browser time to start the download before releasing the blob.
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
   }
 
   return (
@@ -183,33 +221,33 @@ export function ManageBooking({
           {message}
         </p>
 
-        {active && appointment.canModify && mode === "view" && (
-          <div className="flex flex-wrap gap-3 pt-2">
+        {active && mode === "view" && (
+          <div className="flex flex-wrap items-center gap-3 pt-2">
+            {appointment.canModify && (
+              <>
+                <button
+                  ref={changeButtonRef}
+                  type="button"
+                  className={secondaryButton}
+                  disabled={!hydrated}
+                  onClick={() => open("reschedule", "change")}
+                >
+                  Change time
+                </button>
+                <button
+                  ref={cancelButtonRef}
+                  type="button"
+                  className={secondaryButton}
+                  disabled={!hydrated}
+                  onClick={() => open("confirm-cancel", "cancel")}
+                >
+                  Cancel appointment
+                </button>
+              </>
+            )}
             <button
               type="button"
-              className={secondaryButton}
-              disabled={!hydrated}
-              onClick={() => {
-                setMessage(null);
-                setMode("reschedule");
-              }}
-            >
-              Change time
-            </button>
-            <button
-              type="button"
-              className={secondaryButton}
-              disabled={!hydrated}
-              onClick={() => {
-                setMessage(null);
-                setMode("confirm-cancel");
-              }}
-            >
-              Cancel appointment
-            </button>
-            <button
-              type="button"
-              className="text-muted hover:text-foreground text-xs tracking-[0.2em] uppercase underline-offset-4 hover:underline"
+              className={linkButton}
               disabled={!hydrated}
               onClick={downloadCalendarInvite}
             >
@@ -218,14 +256,15 @@ export function ManageBooking({
           </div>
         )}
 
+        {/* A confirmed appointment that can't be modified is past its cutoff. */}
         {active && !appointment.canModify && (
           <p className="text-muted text-sm">
-            Changes are possible online until {formatTime(appointment.modifiableUntil, tz)} on{" "}
+            Online changes closed at {formatTime(appointment.modifiableUntil, tz)} on{" "}
             {formatLongDate(appointment.modifiableUntil, tz)}.
             {shop.phone && (
               <>
                 {" "}
-                To change it now, please call us on{" "}
+                To change or cancel it now, please call us on{" "}
                 <a
                   href={`tel:${shop.phone.replace(/\s/g, "")}`}
                   className="text-foreground underline"
@@ -237,6 +276,12 @@ export function ManageBooking({
             )}
           </p>
         )}
+
+        {appointment.status === "cancelled" && (
+          <a href="/book" className={`${secondaryButton} justify-self-start`}>
+            Book another time
+          </a>
+        )}
       </section>
 
       {mode === "confirm-cancel" && (
@@ -244,7 +289,12 @@ export function ManageBooking({
           aria-labelledby="cancel-heading"
           className="grid gap-4 border border-red-400/40 p-6"
         >
-          <h2 id="cancel-heading" className="font-display text-2xl">
+          <h2
+            id="cancel-heading"
+            ref={cancelHeadingRef}
+            tabIndex={-1}
+            className="font-display text-2xl outline-none"
+          >
             Cancel this appointment?
           </h2>
           <p className="text-muted text-sm">The time will be released for other customers.</p>
@@ -252,7 +302,7 @@ export function ManageBooking({
             <button type="button" className={primaryButton} disabled={busy} onClick={cancel}>
               {busy ? "Cancelling…" : "Yes, cancel it"}
             </button>
-            <button type="button" className={secondaryButton} onClick={() => setMode("view")}>
+            <button type="button" className={secondaryButton} onClick={close}>
               Keep it
             </button>
           </div>
@@ -261,7 +311,12 @@ export function ManageBooking({
 
       {mode === "reschedule" && (
         <section aria-labelledby="reschedule-heading" className="grid gap-10">
-          <h2 id="reschedule-heading" className="sr-only">
+          <h2
+            id="reschedule-heading"
+            ref={rescheduleHeadingRef}
+            tabIndex={-1}
+            className="font-display text-2xl outline-none"
+          >
             Choose a new time
           </h2>
           <Step title="New day">
@@ -302,7 +357,7 @@ export function ManageBooking({
                   ? `Move to ${formatTime(slot.startsAt, tz)}, ${formatLongDate(slot.startsAt, tz)}`
                   : "Choose a time"}
             </button>
-            <button type="button" className={secondaryButton} onClick={() => setMode("view")}>
+            <button type="button" className={secondaryButton} onClick={close}>
               Back
             </button>
           </div>

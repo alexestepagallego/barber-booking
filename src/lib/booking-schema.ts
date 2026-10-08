@@ -34,6 +34,15 @@ export const customerDetailsSchema = z.object({
   privacyAccepted: z.literal(true, "You need to accept the privacy policy"),
 });
 
+/**
+ * Anti-bot fields sent with a booking. `website` is a honeypot: the input is
+ * hidden from people (and from assistive technology), so only bots fill it.
+ */
+export const botCheckSchema = z.object({
+  turnstileToken: z.string().max(4096).optional(),
+  website: z.string().max(500).optional(),
+});
+
 export const createBookingSchema = customerDetailsSchema.extend({
   serviceId: z.uuid(),
   /** null means "no preference". */
@@ -60,6 +69,8 @@ export type BookingConfirmationDto = {
   customerEmail: string;
   /** Path of the manage-your-booking page (contains the secret token). */
   managePath: string;
+  /** False when no email provider is configured, so the page must not promise an email. */
+  emailConfigured: boolean;
 };
 
 export type ApiErrorDto = {

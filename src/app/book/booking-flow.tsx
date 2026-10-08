@@ -15,6 +15,7 @@ import {
   useAvailability,
   useHydrated,
 } from "@/components/booking-ui";
+import { TurnstileWidget, turnstileEnabled } from "@/components/turnstile-widget";
 import type { BookingConfirmationDto, SlotDto } from "@/lib/booking-schema";
 import { customerDetailsSchema } from "@/lib/booking-schema";
 import { formatDuration, formatLongDate, formatPrice, formatTime } from "@/lib/format";
@@ -37,7 +38,10 @@ export function BookingFlow({ catalogue, today }: { catalogue: Catalogue; today:
   const [barberChoice, setBarberChoice] = useState<string | null>(null);
   const [date, setDate] = useState<string | null>(null);
   const [slot, setSlot] = useState<SlotDto | null>(null);
+  /** Messages about the chosen time (shown in the time step). */
   const [notice, setNotice] = useState<string | null>(null);
+  /** Messages about the submission itself (shown next to the button). */
+  const [formNotice, setFormNotice] = useState<string | null>(null);
   const [details, setDetails] = useState<Details>({
     customerName: "",
     customerEmail: "",
@@ -50,6 +54,10 @@ export function BookingFlow({ catalogue, today }: { catalogue: Catalogue; today:
   // One key per attempted booking: reused if the same submission is retried,
   // so a double tap or a flaky network never creates two appointments.
   const idempotencyKey = useRef<string | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileReset, setTurnstileReset] = useState(0);
+  // Honeypot: hidden from people, so only bots ever fill it in.
+  const [website, setWebsite] = useState("");
 
   const service = services.find((s) => s.id === serviceId) ?? null;
   const eligibleBarbers = useMemo(
@@ -100,6 +108,11 @@ export function BookingFlow({ catalogue, today }: { catalogue: Catalogue; today:
       return;
     }
     setFieldErrors({});
+    setFormNotice(null);
+    if (turnstileEnabled && !turnstileToken && !idempotencyKey.current) {
+      setFormNotice("Please complete the verification above the button.");
+      return;
+    }
     setSubmitting(true);
     idempotencyKey.current ??= crypto.randomUUID();
 
@@ -115,6 +128,8 @@ export function BookingFlow({ catalogue, today }: { catalogue: Catalogue; today:
           serviceId,
           barberId: barberChoice === ANY_BARBER ? null : barberChoice,
           startsAt: slot.startsAt,
+          turnstileToken: turnstileToken ?? undefined,
+          website,
         }),
       });
 
@@ -125,6 +140,8 @@ export function BookingFlow({ catalogue, today }: { catalogue: Catalogue; today:
       }
 
       const { code, message, fields } = await errorOf(response);
+      // Verification tokens are single-use: get a fresh one for the next attempt.
+      setTurnstileReset((n) => n + 1);
       if (code === "slot_unavailable") {
         // Someone else got there first: keep the customer's details, refresh the times.
         setSlot(null);
@@ -135,10 +152,11 @@ export function BookingFlow({ catalogue, today }: { catalogue: Catalogue; today:
       } else if (fields) {
         setFieldErrors(fields);
       } else {
-        setNotice(message);
+        setFormNotice(message);
       }
     } catch {
-      setNotice("Connection problem. Please check your connection and try again.");
+      // Keep the idempotency key: retrying the same booking is safe.
+      setFormNotice("Connection problem. Please check your connection and try again.");
     } finally {
       setSubmitting(false);
     }
@@ -268,6 +286,20 @@ export function BookingFlow({ catalogue, today }: { catalogue: Catalogue; today:
               )}
             </span>
           </label>
+          <div aria-hidden="true" className="absolute -left-[9999px] h-px w-px overflow-hidden">
+            <label>
+              Leave this field empty
+              <input
+                type="text"
+                name="website"
+                tabIndex={-1}
+                autoComplete="off"
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+              />
+            </label>
+          </div>
+          <TurnstileWidget onToken={setTurnstileToken} resetSignal={turnstileReset} />
         </div>
       </Step>
 
@@ -278,6 +310,11 @@ export function BookingFlow({ catalogue, today }: { catalogue: Catalogue; today:
             {service.name} · {formatLongDate(slot.startsAt, shop.timezone)},{" "}
             {formatTime(slot.startsAt, shop.timezone)}
           </p>
+          {formNotice && (
+            <p role="alert" className="text-sm text-red-300">
+              {formNotice}
+            </p>
+          )}
           <button type="submit" disabled={submitting} className={primaryButton}>
             {submitting ? "Booking…" : "Confirm booking"}
           </button>
@@ -314,9 +351,18 @@ function Confirmation({
         <dd className="text-muted">with {booking.barberName}</dd>
       </dl>
       <p className="text-muted text-sm">
-        A confirmation is on its way to{" "}
-        <strong className="text-foreground">{booking.customerEmail}</strong>, with a calendar invite
-        and a link to change or cancel the appointment.
+        {booking.emailConfigured ? (
+          <>
+            A confirmation is on its way to{" "}
+            <strong className="text-foreground">{booking.customerEmail}</strong>, with a calendar
+            invite and a link to change or cancel the appointment.
+          </>
+        ) : (
+          <>
+            Booked under <strong className="text-foreground">{booking.customerEmail}</strong>.
+          </>
+        )}{" "}
+        You can also keep the link below: it lets you change or cancel online.
       </p>
       <a href={booking.managePath} className={`${secondaryButton} mx-auto`}>
         Manage or cancel

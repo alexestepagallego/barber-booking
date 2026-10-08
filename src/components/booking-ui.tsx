@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 
 import { addDays, isoWeekday } from "@/lib/calendar";
 import type { ApiErrorDto, AvailabilityResponse, SlotDto } from "@/lib/booking-schema";
@@ -43,45 +43,55 @@ export type AvailabilityState =
   | { status: "error"; message: string };
 
 /**
- * Fetches availability whenever `url` changes (null means "not ready yet"),
- * cancelling stale requests. `reload()` refetches the current URL, e.g.
- * after a 409.
+ * Fetches availability whenever `url` changes (null means "not ready yet").
+ * `reload()` refetches the current URL, e.g. after a 409.
+ *
+ * Every request (effect or reload) goes through one AbortController, so
+ * starting a new request cancels the previous one, and a response that
+ * belongs to an older URL can never overwrite the times of the day now
+ * selected.
  */
 export function useAvailability(url: string | null, headers?: Record<string, string>) {
   const [state, setState] = useState<AvailabilityState>({ status: "idle" });
   const headerKey = JSON.stringify(headers ?? {});
+  const controllerRef = useRef<AbortController | null>(null);
+  const urlRef = useRef(url);
 
-  const load = useCallback(
-    async (signal?: AbortSignal) => {
-      if (!url) {
-        setState({ status: "idle" });
-        return;
-      }
-      setState({ status: "loading" });
-      try {
-        const response = await fetch(url, { signal, headers: JSON.parse(headerKey) });
-        if (!response.ok) throw new Error((await errorOf(response)).message);
-        const body = (await response.json()) as AvailabilityResponse;
-        setState({ status: "ready", slots: body.slots });
-      } catch (error) {
-        if (signal?.aborted) return;
-        setState({
-          status: "error",
-          message: error instanceof Error ? error.message : "Could not load times",
-        });
-      }
-    },
-    [url, headerKey],
-  );
+  const load = useCallback(async () => {
+    controllerRef.current?.abort();
+    urlRef.current = url;
+    if (!url) {
+      setState({ status: "idle" });
+      return;
+    }
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    setState({ status: "loading" });
+    try {
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: JSON.parse(headerKey),
+      });
+      if (!response.ok) throw new Error((await errorOf(response)).message);
+      const body = (await response.json()) as AvailabilityResponse;
+      if (controller.signal.aborted || urlRef.current !== url) return;
+      setState({ status: "ready", slots: body.slots });
+    } catch (error) {
+      if (controller.signal.aborted || urlRef.current !== url) return;
+      setState({
+        status: "error",
+        message: error instanceof Error ? error.message : "Could not load times",
+      });
+    }
+  }, [url, headerKey]);
 
   useEffect(() => {
-    const controller = new AbortController();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetching when the selection changes
-    void load(controller.signal);
-    return () => controller.abort();
+    void load();
+    return () => controllerRef.current?.abort();
   }, [load]);
 
-  return { state, reload: () => load() };
+  return { state, reload: load };
 }
 
 export function Step({

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { connection } from "next/server";
 import { Suspense } from "react";
 
 import { Monogram } from "@/components/monogram";
@@ -14,8 +15,9 @@ import { toManageDto } from "@/server/http/manage-auth";
 import { ManageBooking } from "./manage-booking";
 
 // Static metadata on purpose: the token must never reach a <title>, and
-// these pages must never be indexed. Referrer-Policy: no-referrer is set for
-// /manage/* in next.config.ts so the token does not leak to other sites.
+// these pages must never be indexed. next.config.ts sends
+// `Referrer-Policy: no-referrer` and `X-Robots-Tag: noindex` for /manage/*,
+// so the token does not leak through Referer headers or search engines.
 export const metadata: Metadata = {
   title: "Your appointment",
   robots: { index: false, follow: false, nocache: true },
@@ -41,11 +43,18 @@ export default function ManagePage({ params }: PageProps<"/manage/[token]">) {
 
 /**
  * Reads the token, looks the booking up (uncached: it is secret and its
- * state changes) and hands a minimal DTO to the client. Unknown or
- * malformed tokens render the 404 page without revealing anything.
+ * state changes) and hands a minimal DTO to the client.
+ *
+ * Unknown or malformed tokens render the not-found UI without revealing
+ * anything. Because this runs inside <Suspense> after the static shell has
+ * been streamed, that is a "soft 404": HTTP 200 plus a noindex tag. That is
+ * an accepted trade-off of streaming; a real 404 would require a database
+ * lookup before any byte is sent.
  */
 async function ManageLoader({ params }: { params: PageProps<"/manage/[token]">["params"] }) {
   const { token } = await params;
+  // Everything below depends on the request (current time, live data).
+  await connection();
   if (!manageTokenSchema.safeParse(token).success) notFound();
 
   const details = await findAppointmentByManageToken(getDb(), token);
