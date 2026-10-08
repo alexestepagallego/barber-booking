@@ -20,9 +20,20 @@ export function emailFrom(): string {
   return process.env.EMAIL_FROM ?? "Chane Barber <bookings@example.com>";
 }
 
-/** Public demo: shows a banner and demo credentials, and allows the nightly reset. */
+/**
+ * Public demo: shows a banner and the demo credentials, and enables the
+ * nightly reset. NEXT_PUBLIC_ so the banner can be part of the static shell
+ * (it is inlined at build time; changing it needs a redeploy).
+ */
 export function isDemoMode(): boolean {
-  return process.env.DEMO_MODE === "true";
+  return process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+}
+
+/** Throwaway admin account for the public demo, recreated every night. */
+export function demoAdmin(): { email: string; password: string } | null {
+  const email = process.env.DEMO_ADMIN_EMAIL;
+  const password = process.env.DEMO_ADMIN_PASSWORD;
+  return email && password ? { email, password } : null;
 }
 
 /** How long customer personal data is kept after an appointment, in days. */

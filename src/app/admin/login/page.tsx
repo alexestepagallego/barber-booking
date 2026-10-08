@@ -3,7 +3,7 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 
 import { Monogram } from "@/components/monogram";
-import { isDemoMode } from "@/server/config";
+import { demoAdmin, isDemoMode } from "@/server/config";
 
 import { login } from "../actions";
 import { ActionForm, Input, SubmitButton } from "../ui";
@@ -38,13 +38,14 @@ export default function LoginPage() {
 /** In the public demo, show the throwaway credentials so visitors can try the panel. */
 async function DemoCredentials() {
   await connection();
-  if (!isDemoMode()) return null;
+  const credentials = demoAdmin();
+  if (!isDemoMode() || !credentials) return null;
   return (
     <p className="border-border text-muted border p-4 text-center text-sm">
-      Demo access: <strong className="text-foreground">{process.env.DEMO_ADMIN_EMAIL}</strong> /{" "}
-      <strong className="text-foreground">{process.env.DEMO_ADMIN_PASSWORD}</strong>
+      Demo access: <strong className="text-foreground">{credentials.email}</strong> /{" "}
+      <strong className="text-foreground">{credentials.password}</strong>
       <br />
-      Data resets every night.
+      Everything resets every night.
     </p>
   );
 }

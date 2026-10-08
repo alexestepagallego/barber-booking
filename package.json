@@ -18,7 +18,10 @@
     "db:seed": "tsx src/server/db/seed.ts",
     "db:studio": "drizzle-kit studio",
     "admin:create": "tsx src/server/admin/create-admin-cli.ts",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "demo:reset": "tsx src/server/demo-cli.ts",
+    "tokens:rehash": "tsx src/server/security/rehash-tokens-cli.ts",
+    "screenshots": "playwright test --config playwright.screenshots.config.ts"
   },
   "dependencies": {
     "@date-fns/tz": "^1.5.0",
