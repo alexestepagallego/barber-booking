@@ -7,10 +7,10 @@ import {
   Hr,
   Html,
   Preview,
+  render,
   Section,
   Text,
-} from "@react-email/components";
-import { render } from "@react-email/render";
+} from "react-email";
 
 import { formatDuration, formatLongDate, formatPrice, formatTime } from "@/lib/format";
 

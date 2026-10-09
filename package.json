@@ -26,14 +26,13 @@
   "dependencies": {
     "@date-fns/tz": "^1.5.0",
     "@node-rs/argon2": "^2.2.2",
-    "@react-email/components": "^1.0.12",
-    "@react-email/render": "^2.1.0",
     "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.3",
     "next": "16.4.0",
     "postgres": "^3.4.9",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "react-email": "^6.11.1",
     "server-only": "^0.0.1",
     "zod": "^4.6.5"
   },
