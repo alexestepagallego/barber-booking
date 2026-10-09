@@ -12,6 +12,7 @@ import { localDate } from "@/server/booking/availability";
 import { getAppointmentDetails } from "@/server/booking/manage-appointment";
 import { appUrl } from "@/server/config";
 import { getDb } from "@/server/db/client";
+import { getEmailTransport } from "@/server/email/transport";
 import { appointmentEvents } from "@/server/db/schema";
 import { deriveManageToken } from "@/server/security/tokens";
 
@@ -69,6 +70,8 @@ async function Detail({
     searchParams,
   ]);
   const tz = details.timezone;
+  // Only claim an email when one can actually be sent.
+  const emailsSent = Boolean(details.customerEmail) && getEmailTransport().name !== "log";
   const date = localDate(details.startsAt, tz);
   const manageUrl = `${appUrl()}/manage/${deriveManageToken(details.id)}`;
 
@@ -84,8 +87,8 @@ async function Detail({
           className="border border-emerald-400/50 px-4 py-3 text-sm text-emerald-200"
         >
           {UPDATED_MESSAGE[updated as keyof typeof UPDATED_MESSAGE]}
-          {details.customerEmail && (updated === "cancelled" || updated === "moved")
-            ? " The customer has been emailed."
+          {emailsSent && (updated === "cancelled" || updated === "moved")
+            ? " An email is on its way to the customer."
             : ""}
         </p>
       )}
@@ -95,7 +98,7 @@ async function Detail({
           role="status"
           className="border border-emerald-400/50 px-4 py-3 text-sm text-emerald-200"
         >
-          Booked.{details.customerEmail ? " The customer has been emailed a confirmation." : ""}
+          Booked.{emailsSent ? " A confirmation email is on its way to the customer." : ""}
         </p>
       )}
 
@@ -106,7 +109,7 @@ async function Detail({
             {details.status.replace("_", "-")}
           </span>
         </div>
-        <dl className="text-muted grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
+        <dl className="text-muted grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2 text-sm [&_dd]:break-words">
           <dt>When</dt>
           <dd className="text-foreground">
             {formatLongDate(details.startsAt, tz)}, {formatTime(details.startsAt, tz)}–

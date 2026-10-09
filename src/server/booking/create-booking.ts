@@ -71,8 +71,14 @@ export async function createBooking(
   const slot = slots.find((s) => s.startsAt.getTime() === input.startsAt.getTime());
   if (!slot) throw new SlotUnavailableError();
 
+  const [service] = await db
+    .select({ priceCents: services.priceCents })
+    .from(services)
+    .where(eq(services.id, input.serviceId));
+
   const values = {
     serviceId: input.serviceId,
+    priceCents: service!.priceCents,
     customerName: input.customerName,
     customerEmail: input.customerEmail,
     customerPhone: input.customerPhone,

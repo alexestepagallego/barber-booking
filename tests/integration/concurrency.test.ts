@@ -176,6 +176,7 @@ describe("defence in depth", () => {
             startsAt: start,
             endsAt: addMinutes(start, 30),
             manageTokenHash: `raw-insert-${i}`,
+            priceCents: 1500,
           }),
       ),
     );

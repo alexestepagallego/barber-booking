@@ -7,7 +7,13 @@ const respond = (body: unknown) =>
 
 afterEach(() => {
   delete process.env.TURNSTILE_SECRET_KEY;
+  delete process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 });
+
+const enable = () => {
+  process.env.TURNSTILE_SECRET_KEY = "secret";
+  process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY = "site";
+};
 
 describe("verifyTurnstile", () => {
   it("is skipped when no secret is configured (local development)", async () => {
@@ -20,7 +26,7 @@ describe("verifyTurnstile", () => {
   });
 
   it("requires a token once enabled", async () => {
-    process.env.TURNSTILE_SECRET_KEY = "secret";
+    enable();
     expect(await verifyTurnstile(undefined, "1.2.3.4", respond({ success: true }))).toEqual({
       ok: false,
       reason: "missing-token",
@@ -28,7 +34,7 @@ describe("verifyTurnstile", () => {
   });
 
   it("sends the secret, token and client IP to Cloudflare and trusts only success: true", async () => {
-    process.env.TURNSTILE_SECRET_KEY = "secret";
+    enable();
     const ok = respond({ success: true });
     expect(await verifyTurnstile("token", "1.2.3.4", ok)).toEqual({ ok: true, skipped: false });
 
@@ -47,12 +53,24 @@ describe("verifyTurnstile", () => {
   });
 
   it("fails closed when Cloudflare cannot be reached", async () => {
-    process.env.TURNSTILE_SECRET_KEY = "secret";
+    enable();
     const down = vi.fn<typeof fetch>().mockRejectedValue(new TypeError("fetch failed"));
     vi.spyOn(console, "error").mockImplementation(() => {});
     expect(await verifyTurnstile("token", "1.2.3.4", down)).toEqual({
       ok: false,
       reason: "unavailable",
     });
+  });
+
+  it("is skipped (with a warning) when only the secret is configured", async () => {
+    process.env.TURNSTILE_SECRET_KEY = "secret";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const fetchImpl = respond({ success: false });
+    expect(await verifyTurnstile(undefined, "1.2.3.4", fetchImpl)).toEqual({
+      ok: true,
+      skipped: true,
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalled();
   });
 });

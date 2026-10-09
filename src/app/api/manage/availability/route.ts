@@ -28,7 +28,11 @@ export async function GET(request: Request) {
       date,
       serviceId: appointment.serviceId,
       barberId: appointment.barberId,
-      excludeAppointmentId: appointment.id,
+      existingAppointment: {
+        id: appointment.id,
+        barberId: appointment.barberId,
+        durationMinutes: appointment.durationMinutes,
+      },
     });
 
     const body: AvailabilityResponse = {

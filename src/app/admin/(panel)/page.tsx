@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 
-import { addDays } from "@/lib/calendar";
+import { addDays, parseDate } from "@/lib/calendar";
 import { formatCalendarDate, formatTime } from "@/lib/format";
 import { loadAdminCatalogue, loadAgenda, loadTimeOffForDay } from "@/server/admin/catalogue-admin";
 import { requireAdminPage } from "@/server/admin/session";
@@ -41,19 +41,19 @@ async function Agenda({ searchParams }: { searchParams: PageProps<"/admin">["sea
 
   const requested = (await searchParams).date;
   const today = localDate(new Date(), tz);
-  const date =
-    typeof requested === "string" && /^\d{4}-\d{2}-\d{2}$/.test(requested) ? requested : today;
+  // Anything that is not a real calendar date (2026-02-30, garbage) shows today.
+  const date = typeof requested === "string" && isCalendarDate(requested) ? requested : today;
 
   const day = dayBounds(date, tz);
-  const active = barbers.filter((b) => b.active);
-  const [appointments, absences] = await Promise.all([
-    loadAgenda(db, day),
-    loadTimeOffForDay(
-      db,
-      day,
-      active.map((b) => b.id),
-    ),
-  ]);
+  const appointments = await loadAgenda(db, day);
+  // Active barbers, plus inactive ones who still have appointments that day:
+  // deactivating a barber keeps their bookings, so they must stay visible.
+  const shown = barbers.filter((b) => b.active || appointments.some((a) => a.barberId === b.id));
+  const absences = await loadTimeOffForDay(
+    db,
+    day,
+    shown.map((b) => b.id),
+  );
   const weekday = isoWeekday(date);
   const confirmedCount = appointments.filter((a) => a.status === "confirmed").length;
 
@@ -119,7 +119,7 @@ async function Agenda({ searchParams }: { searchParams: PageProps<"/admin">["sea
       )}
 
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-        {active.map((barber) => {
+        {shown.map((barber) => {
           const own = appointments.filter((a) => a.barberId === barber.id);
           const shifts = barber.hours.filter((h) => h.weekday === weekday);
           const away = absences.filter((t) => t.barberId === barber.id);
@@ -132,6 +132,11 @@ async function Agenda({ searchParams }: { searchParams: PageProps<"/admin">["sea
               <div className="border-border flex items-baseline justify-between border-b pb-2">
                 <h2 id={`barber-${barber.id}`} className="font-display text-2xl">
                   {barber.name}
+                  {!barber.active && (
+                    <span className="text-muted ml-2 font-sans text-xs tracking-wider uppercase">
+                      inactive
+                    </span>
+                  )}
                 </h2>
                 <p className="text-muted text-xs">
                   {shifts.length
@@ -141,12 +146,23 @@ async function Agenda({ searchParams }: { searchParams: PageProps<"/admin">["sea
                     : "Day off"}
                 </p>
               </div>
-              {away.map((t) => (
-                <p key={t.id} className="text-sm text-amber-200">
-                  Away {formatTime(t.startsAt, tz)}–{formatTime(t.endsAt, tz)}
-                  {t.reason ? ` · ${t.reason}` : ""}
-                </p>
-              ))}
+              {away.map((t) => {
+                // Clamp multi-day absences to the day on screen.
+                const from = t.startsAt > day.start ? t.startsAt : null;
+                const to = t.endsAt < day.end ? t.endsAt : null;
+                return (
+                  <p key={t.id} className="text-sm text-amber-200">
+                    {from && to
+                      ? `Away ${formatTime(from, tz)}–${formatTime(to, tz)}`
+                      : from
+                        ? `Away from ${formatTime(from, tz)}`
+                        : to
+                          ? `Away until ${formatTime(to, tz)}`
+                          : "Away all day"}
+                    {t.reason ? ` · ${t.reason}` : ""}
+                  </p>
+                );
+              })}
               {own.length === 0 && <p className="text-muted text-sm">No appointments.</p>}
               <ol className="grid gap-2">
                 {own.map((a) => (
@@ -178,4 +194,13 @@ async function Agenda({ searchParams }: { searchParams: PageProps<"/admin">["sea
       </div>
     </div>
   );
+}
+
+function isCalendarDate(value: string): boolean {
+  try {
+    parseDate(value);
+    return true;
+  } catch {
+    return false;
+  }
 }

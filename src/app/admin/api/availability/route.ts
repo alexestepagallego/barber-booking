@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { AvailabilityResponse } from "@/lib/booking-schema";
 import { getAdmin } from "@/server/admin/session";
 import { getAvailability } from "@/server/booking/get-availability";
+import { getAppointmentDetails } from "@/server/booking/manage-appointment";
 import { getDb } from "@/server/db/client";
 import { handleApiError } from "@/server/http/api-response";
 
@@ -23,11 +24,17 @@ export async function GET(request: Request) {
     if (!(await getAdmin())) return Response.json({ error: "Unauthorized" }, { status: 401 });
     const query = querySchema.parse(Object.fromEntries(new URL(request.url).searchParams));
 
-    const slots = await getAvailability(getDb(), {
+    const db = getDb();
+    const existing = query.exclude ? await getAppointmentDetails(db, query.exclude) : undefined;
+    const slots = await getAvailability(db, {
       date: query.date,
       serviceId: query.serviceId,
       barberId: query.barberId,
-      excludeAppointmentId: query.exclude,
+      existingAppointment: existing && {
+        id: existing.id,
+        barberId: existing.barberId,
+        durationMinutes: existing.durationMinutes,
+      },
       policy: "staff",
     });
     const body: AvailabilityResponse = {

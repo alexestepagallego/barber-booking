@@ -29,6 +29,27 @@
       "when": 1791442716687,
       "tag": "0003_admin_auth_and_rate_limits",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791527772698,
+      "tag": "0004_appointment_price_and_key_hash",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791527773139,
+      "tag": "0005_backfill_price_and_key_hash",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791527782475,
+      "tag": "0006_drop_plain_idempotency_key",
+      "breakpoints": true
     }
   ]
 }

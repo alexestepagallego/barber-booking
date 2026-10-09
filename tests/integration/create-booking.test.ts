@@ -90,4 +90,18 @@ describe("createBooking", () => {
     expect(retry.appointment.id).toBe(first.appointment.id);
     expect(await db.$count(appointments)).toBe(1);
   });
+
+  it("stores only a hash of the idempotency key", async () => {
+    const idempotencyKey = randomUUID();
+    const { appointment } = await createBooking(db, request(), { now, idempotencyKey });
+    const [row] = await db.select().from(appointments);
+    expect(row?.idempotencyKeyHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(JSON.stringify(row)).not.toContain(idempotencyKey);
+    expect(appointment.id).toBe(row?.id);
+  });
+
+  it("stores the price at booking time", async () => {
+    const { appointment } = await createBooking(db, request(), { now });
+    expect(appointment.priceCents).toBe(1500);
+  });
 });

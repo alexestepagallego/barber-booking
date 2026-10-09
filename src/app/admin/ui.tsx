@@ -49,6 +49,11 @@ export function ActionForm({
   );
 }
 
+/** The latest result of the surrounding ActionForm (for widgets that react to it). */
+export function useActionResult(): ActionState {
+  return useContext(FormStateContext);
+}
+
 function FormMessage() {
   const state = useContext(FormStateContext);
   if (!state.message && !state.errors?._form) return null;

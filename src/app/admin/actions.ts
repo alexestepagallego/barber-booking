@@ -36,13 +36,20 @@ import {
 } from "@/server/booking/manage-appointment";
 import { CATALOGUE_TAG } from "@/server/catalogue";
 import { getDb } from "@/server/db/client";
+import { describeError } from "@/server/log";
 import { shopSettings } from "@/server/db/schema";
 import {
   notifyBookingConfirmed,
   notifyCancelled,
   notifyRescheduled,
 } from "@/server/email/notifications";
-import { checkRateLimit, clientIp, RATE_LIMITS } from "@/server/security/rate-limit";
+import {
+  checkRateLimit,
+  clientIp,
+  peekRateLimit,
+  RATE_LIMITS,
+  resetRateLimit,
+} from "@/server/security/rate-limit";
 
 /**
  * Admin Server Actions. Each one is a public POST endpoint, so each one:
@@ -57,21 +64,43 @@ export type ActionState = {
   ok?: boolean;
   message?: string;
   errors?: Record<string, string>;
+  /** Machine-readable outcome the form can react to (e.g. reload the times). */
+  code?: "slot_unavailable";
+  /** Distinguishes two identical successes, so forms can reset every time. */
+  at?: number;
 };
+
+/** Validation errors, plus a message for fields the form shows no input for. */
+function invalid(error: import("zod").ZodError): ActionState {
+  const errors = fieldErrors(error);
+  const message = errors.startsAt
+    ? "Choose a time first."
+    : errors.barberId
+      ? "Choose a barber first."
+      : errors.appointmentId
+        ? "This appointment could not be found."
+        : undefined;
+  return { ok: false, errors, message };
+}
 
 const formObject = (formData: FormData) =>
   Object.fromEntries([...formData.entries()].filter(([key]) => !key.startsWith("$ACTION")));
 
 function domainError(error: unknown): ActionState {
+  if (error instanceof SlotUnavailableError) {
+    return { ok: false, message: error.message, code: "slot_unavailable" };
+  }
   if (
-    error instanceof SlotUnavailableError ||
     error instanceof NotModifiableError ||
     error instanceof NotFoundError ||
     error instanceof RangeError
   ) {
     return { ok: false, message: error.message };
   }
-  throw error;
+  // Never rethrow the original: Next.js would log it in full, and database
+  // errors carry the query parameters (customer name, email, phone).
+  console.error("Admin action failed", describeError(error));
+  throw new Error("Something went wrong. Please try again.");
 }
 
 // ─── Authentication ──────────────────────────────────────────────────────────
@@ -80,22 +109,39 @@ export async function login(_prev: ActionState, formData: FormData): Promise<Act
   const parsed = loginSchema.safeParse(formObject(formData));
   if (!parsed.success) return { ok: false, errors: fieldErrors(parsed.error) };
 
-  // Both limits apply: per IP (one attacker, many accounts) and per account
-  // (many IPs, one account). The response is identical either way.
   const db = getDb();
+  const { email, password } = parsed.data;
   const ip = clientIp(await requestHeaders());
-  const [byIp, byAccount] = await Promise.all([
-    checkRateLimit(db, RATE_LIMITS.loginPerIp, ip),
-    checkRateLimit(db, RATE_LIMITS.loginPerAccount, parsed.data.email),
+  const pair = `${email}:${ip}`;
+  const tooMany = (seconds: number) => ({
+    ok: false,
+    message: `Too many attempts. Try again in ${Math.ceil(seconds / 60)} min.`,
+  });
+
+  // 1. Every attempt from this IP counts: one client trying many accounts.
+  const byIp = await checkRateLimit(db, RATE_LIMITS.loginPerIp, ip);
+  if (!byIp.allowed) return tooMany(byIp.retryAfter);
+
+  // 2. Only FAILURES count per account, and per account + IP, so that someone
+  //    who knows the owner's email cannot lock the owner out from elsewhere.
+  const [byPair, byAccount] = await Promise.all([
+    peekRateLimit(db, RATE_LIMITS.loginFailuresPerAccountAndIp, pair),
+    peekRateLimit(db, RATE_LIMITS.loginFailuresPerAccount, email),
   ]);
-  if (!byIp.allowed || !byAccount.allowed) {
-    const minutes = Math.ceil(Math.max(byIp.retryAfter, byAccount.retryAfter) / 60);
-    return { ok: false, message: `Too many attempts. Try again in ${minutes} min.` };
+  if (!byPair.allowed || !byAccount.allowed) {
+    return tooMany(Math.max(byPair.retryAfter, byAccount.retryAfter));
   }
 
-  const admin = await verifyCredentials(db, parsed.data.email, parsed.data.password);
-  if (!admin) return { ok: false, message: "Email or password is incorrect." };
+  const admin = await verifyCredentials(db, email, password);
+  if (!admin) {
+    await Promise.all([
+      checkRateLimit(db, RATE_LIMITS.loginFailuresPerAccountAndIp, pair),
+      checkRateLimit(db, RATE_LIMITS.loginFailuresPerAccount, email),
+    ]);
+    return { ok: false, message: "Email or password is incorrect." };
+  }
 
+  await resetRateLimit(db, RATE_LIMITS.loginFailuresPerAccountAndIp, pair);
   await startSession(admin.id);
   redirect("/admin");
 }
@@ -105,7 +151,7 @@ export async function login(_prev: ActionState, formData: FormData): Promise<Act
 export async function staffBook(_prev: ActionState, formData: FormData): Promise<ActionState> {
   await requireAdmin();
   const parsed = staffBookingSchema.safeParse(formObject(formData));
-  if (!parsed.success) return { ok: false, errors: fieldErrors(parsed.error) };
+  if (!parsed.success) return invalid(parsed.error);
 
   const db = getDb();
   let appointmentId: string;
@@ -161,7 +207,7 @@ export async function staffReschedule(
 ): Promise<ActionState> {
   await requireAdmin();
   const parsed = staffRescheduleSchema.safeParse(formObject(formData));
-  if (!parsed.success) return { ok: false, errors: fieldErrors(parsed.error) };
+  if (!parsed.success) return invalid(parsed.error);
 
   const db = getDb();
   let before: Date;
@@ -196,7 +242,7 @@ export async function saveServiceAction(
 
   await saveService(getDb(), parsed.data);
   updateTag(CATALOGUE_TAG);
-  return { ok: true, message: `Saved "${parsed.data.name}".` };
+  return { ok: true, message: `Saved "${parsed.data.name}".`, at: Date.now() };
 }
 
 export async function saveBarberAction(
@@ -212,7 +258,7 @@ export async function saveBarberAction(
 
   await saveBarber(getDb(), parsed.data);
   updateTag(CATALOGUE_TAG);
-  return { ok: true, message: `Saved "${parsed.data.name}".` };
+  return { ok: true, message: `Saved "${parsed.data.name}".`, at: Date.now() };
 }
 
 export async function saveScheduleAction(
@@ -265,6 +311,7 @@ export async function addTimeOffAction(
     message: conflicts.length
       ? `Saved. ${conflicts.length} existing appointment(s) fall in this period and were kept: contact those customers (${conflicts.map((c) => c.customerName).join(", ")}).`
       : "Saved.",
+    at: Date.now(),
   };
 }
 

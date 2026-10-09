@@ -22,10 +22,15 @@ export type AvailabilityRequest = {
   barberId?: string;
   now?: Date;
   /**
-   * Ignore this appointment's own time when rescheduling it, so moving a
-   * booking by 15 minutes is not blocked by the booking itself.
+   * When moving an existing appointment:
+   * - its own current time does not count as busy (moving it by 15 minutes
+   *   is not blocked by itself),
+   * - it keeps its own length, even if the service's duration has changed,
+   * - it can stay with its barber and service even if they have since been
+   *   deactivated or the barber no longer offers that service (those only
+   *   affect NEW bookings).
    */
-  excludeAppointmentId?: string;
+  existingAppointment?: { id: string; barberId: string; durationMinutes: number };
   /**
    * "customer" applies the shop's notice and horizon rules. "staff" (admin
    * panel) can book for right now (walk-ins) and up to a year ahead.
@@ -47,25 +52,32 @@ export async function getAvailability(db: Db, request: AvailabilityRequest): Pro
   const [settings] = await db.select().from(shopSettings).where(eq(shopSettings.id, 1));
   if (!settings) throw new Error("Shop settings are missing. Run the seed script.");
 
+  const existing = request.existingAppointment;
   const [service] = await db
     .select()
     .from(services)
-    .where(and(eq(services.id, request.serviceId), eq(services.active, true)));
+    .where(
+      and(eq(services.id, request.serviceId), existing ? undefined : eq(services.active, true)),
+    );
   if (!service) throw new NotFoundError("Service not found");
 
-  // Active barbers who offer this service (optionally just the requested one).
-  const eligible = await db
-    .select({ id: barbers.id })
-    .from(barbers)
-    .innerJoin(barberServices, eq(barberServices.barberId, barbers.id))
-    .where(
-      and(
-        eq(barbers.active, true),
-        eq(barberServices.serviceId, service.id),
-        request.barberId ? eq(barbers.id, request.barberId) : undefined,
-      ),
-    )
-    .orderBy(asc(barbers.sortOrder), asc(barbers.name));
+  // An existing appointment may always stay with its own barber.
+  const keepsBarber = existing !== undefined && request.barberId === existing.barberId;
+  const eligible = keepsBarber
+    ? [{ id: existing.barberId }]
+    : // Active barbers who offer this service (optionally just the requested one).
+      await db
+        .select({ id: barbers.id })
+        .from(barbers)
+        .innerJoin(barberServices, eq(barberServices.barberId, barbers.id))
+        .where(
+          and(
+            eq(barbers.active, true),
+            eq(barberServices.serviceId, service.id),
+            request.barberId ? eq(barbers.id, request.barberId) : undefined,
+          ),
+        )
+        .orderBy(asc(barbers.sortOrder), asc(barbers.name));
   if (request.barberId && eligible.length === 0) {
     throw new NotFoundError("Barber not found or does not offer this service");
   }
@@ -107,9 +119,7 @@ export async function getAvailability(db: Db, request: AvailabilityRequest): Pro
           eq(appointments.status, "confirmed"),
           lt(appointments.startsAt, day.end),
           gt(appointments.endsAt, day.start),
-          request.excludeAppointmentId
-            ? ne(appointments.id, request.excludeAppointmentId)
-            : undefined,
+          existing ? ne(appointments.id, existing.id) : undefined,
         ),
       ),
   ]);
@@ -117,7 +127,7 @@ export async function getAvailability(db: Db, request: AvailabilityRequest): Pro
   return computeAvailableSlots({
     date: request.date,
     timezone: settings.timezone,
-    durationMinutes: service.durationMinutes,
+    durationMinutes: existing?.durationMinutes ?? service.durationMinutes,
     slotIntervalMinutes: settings.slotIntervalMinutes,
     minNoticeMinutes: staff ? 0 : settings.minNoticeMinutes,
     bookingHorizonDays: staff ? STAFF_HORIZON_DAYS : settings.bookingHorizonDays,

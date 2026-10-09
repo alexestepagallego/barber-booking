@@ -26,6 +26,8 @@ export function AppointmentActions({
   today: string;
 }) {
   const [rescheduling, setRescheduling] = useState(false);
+  // A mis-tap must not cancel a booking and email the customer.
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
   if (status !== "confirmed") return null;
 
   return (
@@ -54,12 +56,30 @@ export function AppointmentActions({
           >
             {rescheduling ? "Close" : "Move appointment"}
           </button>
-          <ActionForm action={staffCancel} className="flex flex-wrap items-center gap-3">
-            <input type="hidden" name="appointmentId" value={appointmentId} />
-            <SubmitButton variant="danger" pendingLabel="Cancelling…">
+          {confirmingCancel ? (
+            <ActionForm action={staffCancel} className="flex flex-wrap items-center gap-3">
+              <input type="hidden" name="appointmentId" value={appointmentId} />
+              <span className="text-sm">Cancel and notify the customer?</span>
+              <SubmitButton variant="danger" pendingLabel="Cancelling…">
+                Yes, cancel it
+              </SubmitButton>
+              <button
+                type="button"
+                onClick={() => setConfirmingCancel(false)}
+                className="text-muted text-xs tracking-[0.2em] uppercase underline"
+              >
+                Keep it
+              </button>
+            </ActionForm>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmingCancel(true)}
+              className="border border-red-400/60 px-5 py-2.5 text-xs tracking-[0.2em] text-red-200 uppercase hover:bg-red-400/10"
+            >
               Cancel appointment
-            </SubmitButton>
-          </ActionForm>
+            </button>
+          )}
         </div>
       )}
 

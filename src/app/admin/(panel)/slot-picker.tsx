@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { TimePicker, useAvailability } from "@/components/booking-ui";
 import type { SlotDto } from "@/lib/booking-schema";
+
+import { useActionResult } from "../ui";
 
 /**
  * Barber + date + time selection for staff, backed by /admin/api/availability
@@ -25,7 +27,11 @@ export function StaffSlotPicker({
   defaultBarberId?: string;
   excludeAppointmentId?: string;
 }) {
-  const [barberId, setBarberId] = useState(defaultBarberId ?? barbers[0]?.id ?? "");
+  // The appointment's own barber may have been deactivated since: only
+  // preselect it if it is still one of the options shown.
+  const [barberId, setBarberId] = useState(
+    barbers.some((b) => b.id === defaultBarberId) ? defaultBarberId! : (barbers[0]?.id ?? ""),
+  );
   const [date, setDate] = useState(today);
   const [slot, setSlot] = useState<SlotDto | null>(null);
 
@@ -38,7 +44,29 @@ export function StaffSlotPicker({
           ...(excludeAppointmentId && { exclude: excludeAppointmentId }),
         })}`
       : null;
-  const { state } = useAvailability(url);
+  const { state, reload } = useAvailability(url);
+
+  // When the action reports that the time was just taken, drop the
+  // selection and refresh the list, like the public booking form does.
+  const result = useActionResult();
+  const handled = useRef(result);
+  useEffect(() => {
+    if (result === handled.current) return;
+    handled.current = result;
+    if (result.code === "slot_unavailable") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reacting to the action result
+      setSlot(null);
+      void reload();
+    }
+  }, [result, reload]);
+
+  if (barbers.length === 0) {
+    return (
+      <p className="text-muted text-sm">
+        No active barber offers this service. Assign it to a barber on the Barbers page first.
+      </p>
+    );
+  }
 
   return (
     <div className="grid gap-4">

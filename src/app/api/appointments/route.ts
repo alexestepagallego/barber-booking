@@ -12,7 +12,13 @@ import { getDb } from "@/server/db/client";
 import { notifyBookingConfirmed } from "@/server/email/notifications";
 import { getEmailTransport } from "@/server/email/transport";
 import { apiError, handleApiError, rateLimited } from "@/server/http/api-response";
-import { clientIp, RATE_LIMITS } from "@/server/security/rate-limit";
+import {
+  checkRateLimit,
+  clientIp,
+  peekRateLimit,
+  RATE_LIMITS,
+  rateLimitEmailKey,
+} from "@/server/security/rate-limit";
 import { verifyTurnstile } from "@/server/security/turnstile";
 
 const idempotencyKeySchema = z.uuid().optional();
@@ -60,13 +66,10 @@ export async function POST(request: Request) {
     }
     const input = createBookingSchema.parse(json);
 
-    // Per IP (one client, many bookings) and per recipient address (stops
-    // the form being used to flood someone's inbox with confirmations).
+    // Per IP before anything expensive: one client, many bookings.
     const ip = clientIp(request.headers);
-    const limited =
-      (await rateLimited(RATE_LIMITS.bookingPerIp, ip)) ??
-      (await rateLimited(RATE_LIMITS.bookingPerEmail, input.customerEmail));
-    if (limited) return limited;
+    const limitedByIp = await rateLimited(RATE_LIMITS.bookingPerIp, ip);
+    if (limitedByIp) return limitedByIp;
 
     const db = getDb();
     // Turnstile tokens are single-use. A retry of a request that already
@@ -75,6 +78,7 @@ export async function POST(request: Request) {
     const isReplay =
       idempotencyKey.data !== undefined &&
       (await findAppointmentByIdempotencyKey(db, idempotencyKey.data)) !== undefined;
+    const recipient = rateLimitEmailKey(input.customerEmail);
     if (!isReplay) {
       const human = await verifyTurnstile(bot.data.turnstileToken, ip);
       if (!human.ok) {
@@ -86,11 +90,27 @@ export async function POST(request: Request) {
             )
           : apiError(400, "bot_check_failed", "Please complete the verification and try again.");
       }
+      // Per recipient: caps confirmation emails to one inbox. Checked only
+      // after the bot check and counted only for bookings actually created,
+      // so nobody can use up a customer's budget without booking.
+      const byEmail = await peekRateLimit(db, RATE_LIMITS.bookingPerEmail, recipient);
+      if (!byEmail.allowed) {
+        const response = apiError(
+          429,
+          "rate_limited",
+          "Too many bookings for this email address today. Please call the shop.",
+        );
+        response.headers.set("Retry-After", String(byEmail.retryAfter));
+        return response;
+      }
     }
 
     const result = await createBooking(db, input, { idempotencyKey: idempotencyKey.data });
-    // The email goes out after the response is sent, and only once per booking.
-    if (!result.replayed) after(() => notifyBookingConfirmed(db, result.appointment.id));
+    if (!result.replayed) {
+      await checkRateLimit(db, RATE_LIMITS.bookingPerEmail, recipient);
+      // The email goes out after the response is sent, and only once per booking.
+      after(() => notifyBookingConfirmed(db, result.appointment.id));
+    }
 
     const body: BookingConfirmationDto = {
       id: result.appointment.id,

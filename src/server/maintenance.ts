@@ -1,4 +1,4 @@
-import { and, lt, ne } from "drizzle-orm";
+import { and, isNotNull, lt, ne } from "drizzle-orm";
 
 import { retentionDays } from "@/server/config";
 import type { Db } from "@/server/db/client";
@@ -21,4 +21,18 @@ export async function erasePersonalData(db: Db, now = new Date()) {
     .where(and(lt(appointments.endsAt, cutoff), ne(appointments.customerEmail, ERASED_EMAIL)))
     .returning({ id: appointments.id });
   return { erased: erased.length, olderThan: cutoff.toISOString() };
+}
+
+/**
+ * Idempotency keys only need to live as long as a client might retry.
+ * After a day they are dropped, so an old key can never replay a booking.
+ */
+export async function expireIdempotencyKeys(db: Db, now = new Date()) {
+  const cutoff = new Date(now.getTime() - DAY);
+  const expired = await db
+    .update(appointments)
+    .set({ idempotencyKeyHash: null })
+    .where(and(isNotNull(appointments.idempotencyKeyHash), lt(appointments.createdAt, cutoff)))
+    .returning({ id: appointments.id });
+  return expired.length;
 }

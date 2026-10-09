@@ -6,7 +6,7 @@ import { getDb } from "@/server/db/client";
 import { resetDemo } from "@/server/demo";
 import { isAuthorizedCron } from "@/server/http/cron-auth";
 import { purgeExpiredSessions } from "@/server/admin/auth";
-import { erasePersonalData } from "@/server/maintenance";
+import { erasePersonalData, expireIdempotencyKeys } from "@/server/maintenance";
 import { purgeExpiredRateLimits } from "@/server/security/rate-limit";
 
 export const maxDuration = 60;
@@ -24,6 +24,7 @@ export async function GET(request: Request) {
   const result = {
     ...(await erasePersonalData(db)),
     expiredSessions: await purgeExpiredSessions(db),
+    expiredIdempotencyKeys: await expireIdempotencyKeys(db),
     expiredRateLimits: await purgeExpiredRateLimits(db),
   };
   // The public demo starts every day from the same clean state.

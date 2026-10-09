@@ -13,7 +13,7 @@ import { lockBarberSchedule } from "./schedule-lock";
 
 /** Defined in drizzle/0001_no_overlapping_appointments.sql. */
 export const NO_OVERLAP_CONSTRAINT = "appointments_no_overlap";
-const IDEMPOTENCY_CONSTRAINT = "appointments_idempotency_key_unique";
+const IDEMPOTENCY_CONSTRAINT = "appointments_idempotency_key_hash_unique";
 
 export type AppointmentInput = {
   barberId: string;
@@ -23,6 +23,9 @@ export type AppointmentInput = {
   customerPhone: string;
   startsAt: Date;
   endsAt: Date;
+  /** Price at booking time, stored on the appointment. */
+  priceCents: number;
+  /** The client's raw Idempotency-Key; only its hash is stored. */
   idempotencyKey?: string;
   actor: "customer" | "admin";
 };
@@ -57,7 +60,7 @@ export async function insertAppointment(db: Db, input: AppointmentInput): Promis
   // token is derived from it and its hash must be part of the same INSERT.
   const id = randomUUID();
   const token = deriveManageToken(id);
-  const { actor, ...values } = input;
+  const { actor, idempotencyKey, ...values } = input;
 
   try {
     const appointment = await withTransactionRetry(() =>
@@ -66,7 +69,13 @@ export async function insertAppointment(db: Db, input: AppointmentInput): Promis
 
         const [created] = await tx
           .insert(appointments)
-          .values({ ...values, id, manageTokenHash: hashToken(token), status: "confirmed" })
+          .values({
+            ...values,
+            id,
+            idempotencyKeyHash: idempotencyKey ? hashToken(idempotencyKey) : null,
+            manageTokenHash: hashToken(token),
+            status: "confirmed",
+          })
           .returning();
         if (!created) throw new Error("INSERT … RETURNING returned no row");
 
@@ -96,8 +105,8 @@ export async function insertAppointment(db: Db, input: AppointmentInput): Promis
     // which one Postgres reports depends on index order. Check for a replay
     // first so the answer does not depend on that detail. The failed
     // transaction is already rolled back, so it is safe to query again.
-    if (input.idempotencyKey && (overlaps || duplicateKey)) {
-      const existing = await findAppointmentByIdempotencyKey(db, input.idempotencyKey);
+    if (idempotencyKey && (overlaps || duplicateKey)) {
+      const existing = await findAppointmentByIdempotencyKey(db, idempotencyKey);
       if (existing) {
         return {
           appointment: existing,
@@ -119,7 +128,7 @@ export async function findAppointmentByIdempotencyKey(
   const [existing] = await db
     .select()
     .from(appointments)
-    .where(eq(appointments.idempotencyKey, idempotencyKey));
+    .where(eq(appointments.idempotencyKeyHash, hashToken(idempotencyKey)));
   return existing;
 }
 

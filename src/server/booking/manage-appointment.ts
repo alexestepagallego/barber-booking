@@ -60,8 +60,6 @@ async function loadDetails(
       appointment: appointments,
       barberName: barbers.name,
       serviceName: services.name,
-      durationMinutes: services.durationMinutes,
-      priceCents: services.priceCents,
       timezone: shopSettings.timezone,
       cutoff: shopSettings.cancellationCutoffMinutes,
       reschedules: sql<number>`(
@@ -92,8 +90,10 @@ async function loadDetails(
     barberName: row.barberName,
     serviceId: a.serviceId,
     serviceName: row.serviceName,
-    durationMinutes: row.durationMinutes,
-    priceCents: row.priceCents,
+    // The appointment's own length and price: later edits to the service
+    // never change what this customer booked.
+    durationMinutes: Math.round((a.endsAt.getTime() - a.startsAt.getTime()) / MINUTE),
+    priceCents: a.priceCents,
     customerName: a.customerName,
     customerEmail: a.customerEmail,
     customerPhone: a.customerPhone,
@@ -211,7 +211,11 @@ export async function rescheduleAppointment(
     serviceId: before.serviceId,
     barberId: targetBarberId,
     now,
-    excludeAppointmentId: id,
+    existingAppointment: {
+      id,
+      barberId: before.barberId,
+      durationMinutes: before.durationMinutes,
+    },
     policy: actor === "customer" ? "customer" : "staff",
   });
   const slot = slots.find((s) => s.startsAt.getTime() === startsAt.getTime());

@@ -17,7 +17,7 @@ export default function ServicesPage() {
         <h1 className="font-display text-4xl italic">Services</h1>
         <p className="text-muted mt-1 text-sm">
           Services with bookings cannot be deleted; deactivate them to hide them from the booking
-          page. Changing a duration only affects new bookings.
+          page. Changes to duration or price apply to new bookings only.
         </p>
       </div>
       <Suspense fallback={<p className="text-muted">Loading…</p>}>
@@ -82,7 +82,7 @@ function ServiceForm({
         name="price"
         type="number"
         min={0}
-        step={0.5}
+        step={0.01}
         defaultValue={service ? service.priceCents / 100 : 15}
         required
       />

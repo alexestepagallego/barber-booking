@@ -180,8 +180,14 @@ export const appointments = pgTable(
     status: appointmentStatus().notNull().default("confirmed"),
     /** SHA-256 of the secret sent in the "manage your booking" link. */
     manageTokenHash: text().notNull(),
-    /** Client-generated key so a retried request returns the same booking. */
-    idempotencyKey: uuid(),
+    /**
+     * SHA-256 of the client's Idempotency-Key. Only the hash is stored: a
+     * replay returns the manage link, so a copy of the database must not be
+     * enough to replay someone else's booking. Cleared after 24 h.
+     */
+    idempotencyKeyHash: text(),
+    /** Price at booking time: later price changes never alter existing appointments. */
+    priceCents: integer().notNull(),
     cancelledAt: timestamp({ withTimezone: true }),
     reminderSentAt: timestamp({ withTimezone: true }),
     ...timestamps,
@@ -193,7 +199,7 @@ export const appointments = pgTable(
       sql`(${t.status} = 'cancelled') = (${t.cancelledAt} IS NOT NULL)`,
     ),
     unique("appointments_manage_token_hash_unique").on(t.manageTokenHash),
-    unique("appointments_idempotency_key_unique").on(t.idempotencyKey),
+    unique("appointments_idempotency_key_hash_unique").on(t.idempotencyKeyHash),
     index("appointments_starts_at_idx").on(t.startsAt),
   ],
 );

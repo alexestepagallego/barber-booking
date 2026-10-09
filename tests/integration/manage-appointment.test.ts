@@ -10,7 +10,7 @@ import {
   markAppointmentOutcome,
   rescheduleAppointment,
 } from "@/server/booking/manage-appointment";
-import { appointmentEvents, appointments } from "@/server/db/schema";
+import { appointmentEvents, appointments, barbers, services } from "@/server/db/schema";
 
 import { createTestDb, customer, resetDatabase } from "./test-db";
 
@@ -234,5 +234,57 @@ describe("markAppointmentOutcome", () => {
     await markAppointmentOutcome(db, id, { outcome: "no_show", now: local("10:20") });
     const [row] = await db.select().from(appointments).where(eq(appointments.id, id));
     expect(row?.status).toBe("no_show");
+  });
+});
+
+describe("existing appointments are not changed by later catalogue edits", () => {
+  it("keeps its own length and price after the service is changed", async () => {
+    const { id } = await book("10:00");
+    await db
+      .update(services)
+      .set({ durationMinutes: 60, priceCents: 9900 })
+      .where(eq(services.id, cut));
+
+    const { after } = await rescheduleAppointment(db, id, {
+      startsAt: local("17:00"),
+      actor: "customer",
+      now,
+    });
+    expect(after.endsAt).toEqual(local("17:30"));
+    expect(after.durationMinutes).toBe(30);
+    expect(after.priceCents).toBe(1500);
+  });
+
+  it("can still be moved after its service is deactivated", async () => {
+    const { id } = await book("10:00");
+    await db.update(services).set({ active: false }).where(eq(services.id, cut));
+
+    const { after } = await rescheduleAppointment(db, id, {
+      startsAt: local("11:00"),
+      actor: "customer",
+      now,
+    });
+    expect(after.startsAt).toEqual(local("11:00"));
+  });
+
+  it("can still be moved after its barber is deactivated, but not to another inactive one", async () => {
+    const { id } = await book("10:00");
+    await db.update(barbers).set({ active: false });
+
+    const { after } = await rescheduleAppointment(db, id, {
+      startsAt: local("12:00"),
+      actor: "admin",
+      now,
+    });
+    expect(after.barberId).toBe(chane);
+
+    await expect(
+      rescheduleAppointment(db, id, {
+        startsAt: local("12:00"),
+        barberId: leo,
+        actor: "admin",
+        now,
+      }),
+    ).rejects.toThrow(/Barber not found/);
   });
 });

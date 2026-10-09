@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, inArray, isNull, lt, or } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import type { z } from "zod";
 
 import type {
@@ -11,6 +11,7 @@ import type {
 import { addDays } from "@/lib/calendar";
 import { zonedDateTime } from "@/server/booking/availability";
 import type { Db } from "@/server/db/client";
+import { isConstraintViolation, PG_ERROR } from "@/server/db/errors";
 import {
   appointments,
   barberServices,
@@ -28,10 +29,14 @@ import {
  * deactivated instead, so history and foreign keys stay intact.
  */
 
+// Combining diacritical marks (U+0300–U+036F), written as escapes on purpose:
+// as literal characters they would be invisible in the source.
+const DIACRITICS = new RegExp("[\\u0300-\\u036f]", "g");
+
 const slugify = (value: string) =>
   value
     .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(DIACRITICS, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
@@ -49,6 +54,35 @@ async function uniqueSlug(
   return slug;
 }
 
+/**
+ * Two admins creating "Fade" at the same moment would both pick the slug
+ * "fade"; the loser hits the unique constraint. Retrying recomputes the
+ * slug ("fade-2") instead of failing.
+ */
+async function withSlugRetry<T>(create: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await create();
+    } catch (error) {
+      const slugTaken =
+        isConstraintViolation(error, PG_ERROR.uniqueViolation, "services_slug_unique") ||
+        isConstraintViolation(error, PG_ERROR.uniqueViolation, "barbers_slug_unique");
+      if (!slugTaken || attempt >= 5) throw error;
+    }
+  }
+}
+
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+
+/**
+ * Serialises edits of one barber's schedule and services. Their saves
+ * replace rows (DELETE + INSERT); without a lock, two concurrent saves
+ * under READ COMMITTED would merge both versions instead of one winning.
+ */
+async function lockBarberRow(tx: Tx, barberId: string) {
+  await tx.execute(sql`SELECT 1 FROM ${barbers} WHERE ${barbers.id} = ${barberId} FOR UPDATE`);
+}
+
 export async function saveService(db: Db, input: z.output<typeof serviceSchema>) {
   const values = {
     name: input.name,
@@ -62,52 +96,63 @@ export async function saveService(db: Db, input: z.output<typeof serviceSchema>)
     await db.update(services).set(values).where(eq(services.id, input.id));
     return input.id;
   }
-  const [row] = await db
-    .insert(services)
-    .values({ ...values, slug: await uniqueSlug(db, services, input.name) })
-    .returning({ id: services.id });
-  // A new service is offered by every active barber until configured otherwise.
-  const active = await db.select({ id: barbers.id }).from(barbers).where(eq(barbers.active, true));
-  if (row && active.length) {
-    await db
-      .insert(barberServices)
-      .values(active.map((b) => ({ barberId: b.id, serviceId: row.id })))
-      .onConflictDoNothing();
-  }
-  return row!.id;
+  return withSlugRetry(() =>
+    db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(services)
+        .values({ ...values, slug: await uniqueSlug(tx, services, input.name) })
+        .returning({ id: services.id });
+      // A new service is offered by every active barber until configured otherwise.
+      const active = await tx
+        .select({ id: barbers.id })
+        .from(barbers)
+        .where(eq(barbers.active, true));
+      if (active.length) {
+        await tx
+          .insert(barberServices)
+          .values(active.map((b) => ({ barberId: b.id, serviceId: row!.id })))
+          .onConflictDoNothing();
+      }
+      return row!.id;
+    }),
+  );
 }
 
 export async function saveBarber(db: Db, input: z.output<typeof barberSchema>) {
-  return db.transaction(async (tx) => {
-    const values = {
-      name: input.name,
-      bio: input.bio || null,
-      sortOrder: input.sortOrder,
-      active: input.active,
-    };
-    let id = input.id;
-    if (id) {
-      await tx.update(barbers).set(values).where(eq(barbers.id, id));
-    } else {
-      const [row] = await tx
-        .insert(barbers)
-        .values({ ...values, slug: await uniqueSlug(tx, barbers, input.name) })
-        .returning({ id: barbers.id });
-      id = row!.id;
-    }
-    await tx.delete(barberServices).where(eq(barberServices.barberId, id));
-    if (input.serviceIds.length) {
-      await tx
-        .insert(barberServices)
-        .values(input.serviceIds.map((serviceId) => ({ barberId: id!, serviceId })));
-    }
-    return id;
-  });
+  return withSlugRetry(() =>
+    db.transaction(async (tx) => {
+      const values = {
+        name: input.name,
+        bio: input.bio || null,
+        sortOrder: input.sortOrder,
+        active: input.active,
+      };
+      let id = input.id;
+      if (id) {
+        await lockBarberRow(tx, id);
+        await tx.update(barbers).set(values).where(eq(barbers.id, id));
+      } else {
+        const [row] = await tx
+          .insert(barbers)
+          .values({ ...values, slug: await uniqueSlug(tx, barbers, input.name) })
+          .returning({ id: barbers.id });
+        id = row!.id;
+      }
+      await tx.delete(barberServices).where(eq(barberServices.barberId, id));
+      if (input.serviceIds.length) {
+        await tx
+          .insert(barberServices)
+          .values(input.serviceIds.map((serviceId) => ({ barberId: id!, serviceId })));
+      }
+      return id;
+    }),
+  );
 }
 
-/** Replaces a barber's whole weekly schedule atomically. */
+/** Replaces a barber's whole weekly schedule atomically, one save at a time. */
 export async function saveWeekSchedule(db: Db, input: z.output<typeof weekScheduleSchema>) {
   await db.transaction(async (tx) => {
+    await lockBarberRow(tx, input.barberId);
     await tx.delete(workingHours).where(eq(workingHours.barberId, input.barberId));
     const rows = input.days.flatMap((shifts, index) =>
       shifts.map((s) => ({ barberId: input.barberId, weekday: index + 1, ...s })),

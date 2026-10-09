@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -19,8 +19,20 @@ import {
 import { zonedDateTime } from "@/server/booking/availability";
 import { createBooking } from "@/server/booking/create-booking";
 import { getAvailability } from "@/server/booking/get-availability";
-import { adminSessions, adminUsers, barberServices, services } from "@/server/db/schema";
-import { checkRateLimit, purgeExpiredRateLimits } from "@/server/security/rate-limit";
+import {
+  adminSessions,
+  adminUsers,
+  barberServices,
+  barbers,
+  services,
+  workingHours,
+} from "@/server/db/schema";
+import {
+  checkRateLimit,
+  peekRateLimit,
+  purgeExpiredRateLimits,
+  resetRateLimit,
+} from "@/server/security/rate-limit";
 import { hashToken } from "@/server/security/tokens";
 
 import { createTestDb, customer, resetDatabase } from "./test-db";
@@ -132,6 +144,19 @@ describe("rate limiting", () => {
     expect(results.filter((r) => r.allowed)).toHaveLength(5);
   });
 
+  it("peeks without counting, and can be reset (failure-only limits)", async () => {
+    const failures = { name: "fail", limit: 2, windowSeconds: 60 };
+    expect((await peekRateLimit(db, failures, "x", now)).allowed).toBe(true);
+    await checkRateLimit(db, failures, "x", now);
+    await checkRateLimit(db, failures, "x", now);
+    expect(await peekRateLimit(db, failures, "x", now)).toMatchObject({ allowed: false });
+    // Peeking never consumed anything.
+    expect(await peekRateLimit(db, failures, "x", now)).toMatchObject({ remaining: 0 });
+
+    await resetRateLimit(db, failures, "x");
+    expect((await peekRateLimit(db, failures, "x", now)).allowed).toBe(true);
+  });
+
   it("purges expired counters", async () => {
     await checkRateLimit(db, rule, "old", now);
     expect(await purgeExpiredRateLimits(db, new Date(now.getTime() + 120_000))).toBe(1);
@@ -232,5 +257,42 @@ describe("catalogue administration", () => {
     await expect(
       createBooking(db, input, { now: fiveMinutesBefore, actor: "admin" }),
     ).rejects.toThrow(/no longer available/);
+  });
+
+  it("two simultaneous schedule saves never merge: one of them wins whole", async () => {
+    const week = (start: string, end: string) => {
+      const days = Array.from({ length: 7 }, () => [] as { startTime: string; endTime: string }[]);
+      days[0] = [{ startTime: start, endTime: end }];
+      return days;
+    };
+    await Promise.all([
+      saveWeekSchedule(db, { barberId: chane(), days: week("09:00", "13:00") }),
+      saveWeekSchedule(db, { barberId: chane(), days: week("10:00", "14:00") }),
+    ]);
+    const rows = await db.select().from(workingHours).where(eq(workingHours.barberId, chane()));
+    expect(rows).toHaveLength(1);
+  });
+
+  it("creating two services with the same name at once gives both a unique slug", async () => {
+    const input = { name: "Kids cut", durationMinutes: 20, price: 10, sortOrder: 9, active: true };
+    const ids = await Promise.all([saveService(db, input), saveService(db, input)]);
+    const rows = await db.select().from(services).where(inArray(services.id, ids));
+    expect(rows.map((r) => r.slug).sort()).toEqual(["kids-cut", "kids-cut-2"]);
+  });
+
+  it("keeps an inactive barber's offered services when saved again", async () => {
+    await db.update(barbers).set({ active: false }).where(eq(barbers.id, chane()));
+    await saveBarber(db, {
+      id: chane(),
+      name: "Chane",
+      sortOrder: 1,
+      active: false,
+      serviceIds: [cut()],
+    });
+    const offered = await db
+      .select()
+      .from(barberServices)
+      .where(eq(barberServices.barberId, chane()));
+    expect(offered.map((o) => o.serviceId)).toEqual([cut()]);
   });
 });

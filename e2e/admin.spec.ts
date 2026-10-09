@@ -57,6 +57,8 @@ test.describe("admin panel", () => {
 
     await page.getByRole("link", { name: /Walk In/ }).click();
     await page.getByRole("button", { name: "Cancel appointment" }).click();
+    // A second, explicit confirmation: a mis-tap must not cancel and email.
+    await page.getByRole("button", { name: "Yes, cancel it" }).click();
     await expect(
       page.getByRole("status").filter({ hasText: "Appointment cancelled." }),
     ).toBeVisible();

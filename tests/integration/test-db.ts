@@ -50,4 +50,7 @@ export const customer = {
   customerName: "Test Customer",
   customerEmail: "customer@example.com",
   customerPhone: "+34600000000",
+  // Only used by tests that insert appointments directly (createBooking
+  // looks the price up itself).
+  priceCents: 1500,
 } as const;

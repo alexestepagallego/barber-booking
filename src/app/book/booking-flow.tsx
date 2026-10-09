@@ -55,6 +55,10 @@ export function BookingFlow({ catalogue, today }: { catalogue: Catalogue; today:
   // so a double tap or a flaky network never creates two appointments.
   const idempotencyKey = useRef<string | null>(null);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  // After a network failure the booking may have been saved: the retry reuses
+  // the idempotency key (and the server answers it without a new token).
+  // After any other error a fresh verification token is required.
+  const retryingAfterNetworkError = useRef(false);
   const [turnstileReset, setTurnstileReset] = useState(0);
   // Honeypot: hidden from people, so only bots ever fill it in.
   const [website, setWebsite] = useState("");
@@ -109,7 +113,7 @@ export function BookingFlow({ catalogue, today }: { catalogue: Catalogue; today:
     }
     setFieldErrors({});
     setFormNotice(null);
-    if (turnstileEnabled && !turnstileToken && !idempotencyKey.current) {
+    if (turnstileEnabled && !turnstileToken && !retryingAfterNetworkError.current) {
       setFormNotice("Please complete the verification above the button.");
       return;
     }
@@ -133,6 +137,7 @@ export function BookingFlow({ catalogue, today }: { catalogue: Catalogue; today:
         }),
       });
 
+      retryingAfterNetworkError.current = false;
       if (response.ok) {
         setConfirmation((await response.json()) as BookingConfirmationDto);
         window.scrollTo({ top: 0, behavior: "smooth" });
@@ -156,6 +161,7 @@ export function BookingFlow({ catalogue, today }: { catalogue: Catalogue; today:
       }
     } catch {
       // Keep the idempotency key: retrying the same booking is safe.
+      retryingAfterNetworkError.current = true;
       setFormNotice("Connection problem. Please check your connection and try again.");
     } finally {
       setSubmitting(false);
