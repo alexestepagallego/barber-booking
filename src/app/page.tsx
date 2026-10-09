@@ -1,8 +1,8 @@
 import Image from "next/image";
+import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
 
-import { IntroLink } from "@/components/intro-link";
 import { Monogram } from "@/components/monogram";
 import { formatDuration, formatPrice, WEEKDAY_NAMES } from "@/lib/format";
 import { getCatalogue } from "@/server/catalogue";
@@ -30,12 +30,12 @@ export default function Home() {
           <h1 className="font-display text-6xl italic sm:text-8xl">Chane Barber</h1>
           <div className="bg-foreground h-px w-16" />
           <p className="text-muted max-w-sm font-light">Where your best occasion begins.</p>
-          <IntroLink
+          <Link
             href="/book"
             className="bg-foreground text-background hover:bg-background hover:text-foreground border-foreground mt-4 border px-10 py-4 text-sm tracking-[0.25em] uppercase transition-colors"
           >
             Book an appointment
-          </IntroLink>
+          </Link>
         </div>
 
         <a
@@ -112,12 +112,12 @@ async function ShopDetails() {
       </Section>
 
       <div className="text-center">
-        <IntroLink
+        <Link
           href="/book"
           className="border-foreground hover:bg-foreground hover:text-background inline-block border px-10 py-4 text-sm tracking-[0.25em] uppercase transition-colors"
         >
           Book now
-        </IntroLink>
+        </Link>
       </div>
     </div>
   );

@@ -24,7 +24,6 @@ export default defineConfig({
   use: {
     baseURL: `http://localhost:${E2E_PORT}`,
     trace: "retain-on-failure",
-    // Skips the intro video, which also exercises the reduced-motion path.
     reducedMotion: "reduce",
     timezoneId: "Europe/Madrid",
     locale: "en-GB",

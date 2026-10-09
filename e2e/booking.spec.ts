@@ -15,30 +15,11 @@ test.describe("customer journey", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Chane Barber" })).toBeVisible();
     await expect(page.getByText("Classic cut").first()).toBeVisible();
 
-    // Reduced motion is on, so the intro video is skipped.
     await page.getByRole("link", { name: "Book an appointment" }).click();
     await expect(page).toHaveURL(/\/book$/);
 
     const manage = await bookThroughUi(page);
     expect(manage).toBeTruthy();
-  });
-
-  test("without reduced motion, the shop-front intro plays and then opens the form", async ({
-    browser,
-  }) => {
-    const context = await browser.newContext({
-      reducedMotion: "no-preference",
-      baseURL: test.info().project.use.baseURL,
-    });
-    const page = await context.newPage();
-    await page.goto("/");
-    await page.getByRole("link", { name: "Book an appointment" }).click();
-
-    const video = page.locator("video");
-    await expect(video).toBeVisible();
-    await expect(page.getByRole("button", { name: "Skip" })).toBeFocused();
-    await expect(page).toHaveURL(/\/book$/, { timeout: 10_000 });
-    await context.close();
   });
 
   test("the form explains what is wrong and keeps what was typed", async ({ page }) => {
