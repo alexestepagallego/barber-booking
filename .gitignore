@@ -48,3 +48,8 @@ next-env.d.ts
 /test-results
 /playwright-report
 /e2e/.auth
+
+# Agent skills installed by marketplace CLIs (not part of the app)
+/.agents
+/.claude
+/skills-lock.json

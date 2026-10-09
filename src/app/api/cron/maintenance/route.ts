@@ -10,7 +10,8 @@ import { purgeExpiredSessions } from "@/server/admin/auth";
 import { erasePersonalData, expireIdempotencyKeys } from "@/server/maintenance";
 import { purgeExpiredRateLimits } from "@/server/security/rate-limit";
 
-export const maxDuration = 60;
+// The demo reset writes a few hundred rows; leave room for a cold database.
+export const maxDuration = 300;
 
 /**
  * GET /api/cron/maintenance — nightly (see vercel.json).

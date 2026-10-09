@@ -10,6 +10,12 @@ Online booking for a real barbershop,
 way a production system should be: **double bookings are impossible, not
 just unlikely**, and that is proven by tests that release up to 100 overlapping booking requests at once against a real database.
 
+**Live demo: [barber-booking-ten-iota.vercel.app](https://barber-booking-ten-iota.vercel.app)**.
+To try the staff panel, sign in at
+[/admin/login](https://barber-booking-ten-iota.vercel.app/admin/login) with
+`demo@chanebarber.app` / `demo-barber-2026`. Everything resets every night,
+and demo bookings send no real emails.
+
 <p align="center">
   <img src="docs/screenshots/booking-flow.gif" alt="Booking an appointment: service, barber, day, time, details, confirmation" width="720">
 </p>
@@ -177,10 +183,11 @@ docs/                    everything above, plus screenshots
 
 ## Status
 
-All eight planned phases are done: the booking engine, the public flow,
-manage links, emails and reminders, the admin panel, hardening with E2E
-tests, a demo mode with nightly reset, and the documentation. The public
-demo goes live once the Vercel, Neon and Resend accounts are connected
+All eight planned phases are done and deployed: the booking engine, the
+public flow, manage links, emails and reminders, the admin panel, hardening
+with E2E tests, the documentation, and a public demo (Vercel + Neon in
+Frankfurt) that resets every night. Real email delivery (Resend) and the
+Turnstile bot check switch on as soon as their keys are added
 ([deployment guide](docs/deployment.md)).
 
 Built with Claude Code as an AI pair programmer. The tests and reviews

@@ -43,6 +43,27 @@ also runs anywhere `next start` runs, with any PostgreSQL 14+ that has the
 | `NEXT_PUBLIC_DEMO_MODE`                   | demo only   | `true` for the public demo, **never for a real shop** (it resets all data nightly) |
 | `DEMO_ADMIN_EMAIL`, `DEMO_ADMIN_PASSWORD` | demo only   | throwaway credentials shown on the login page                                      |
 
+### Lessons from the first deployment
+
+- **Run the functions next to the database.** Vercel runs functions in
+  Washington (`iad1`) by default. With the database in Frankfurt, every
+  query crossed the Atlantic, and the demo reset (a few hundred writes)
+  timed out. `vercel.json` therefore pins `"regions": ["fra1"]`, the same
+  region as the Neon database (`vercel integration add neon -m region=fra1`).
+  If you pick another database region, change both.
+- **Secrets added from the CLI are sensitive.** Their values cannot be read
+  back (`vercel env pull` leaves them empty). Keep a copy where you
+  generate them if you need them later, for example `CRON_SECRET` to
+  trigger a job by hand.
+- **Never run data scripts from your machine against production without
+  its secrets.** Sample bookings and rehashed links are derived from
+  `MANAGE_LINK_SECRET`; both CLIs refuse to run against a remote database
+  without it. Trigger the deployed cron instead:
+  `curl -H "Authorization: Bearer $CRON_SECRET" https://your-domain/api/cron/maintenance`.
+- **Marketplace terms are accepted in the browser.** The first
+  `vercel integration add neon` stops with a link to accept Neon's terms on
+  vercel.com; run it again afterwards.
+
 ## 3. Email (Resend)
 
 1. In Resend, add a sending **subdomain**, for example `mail.your-domain`.
@@ -84,10 +105,12 @@ and cancel it.
 ## Public demo
 
 Same steps with `NEXT_PUBLIC_DEMO_MODE=true` and the demo credentials. To
-fill it straight away instead of waiting for the nightly run:
+fill it straight away instead of waiting for the nightly run, trigger the
+maintenance cron, which resets the demo and also refreshes the cached
+catalogue:
 
 ```bash
-DATABASE_URL='<demo database>' DEMO_ADMIN_EMAIL=… DEMO_ADMIN_PASSWORD=… npm run demo:reset -- --yes
+curl -H "Authorization: Bearer $CRON_SECRET" https://your-domain/api/cron/maintenance
 ```
 
 ## Self-hosting
