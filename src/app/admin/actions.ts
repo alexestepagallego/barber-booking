@@ -1,7 +1,7 @@
 "use server";
 
 import { updateTag } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { after } from "next/server";
 import { z } from "zod";
 
@@ -17,7 +17,6 @@ import {
   timeOffSchema,
   weekScheduleSchema,
 } from "@/lib/admin-schema";
-import { verifyCredentials } from "@/server/admin/auth";
 import {
   addTimeOff,
   deleteTimeOff,
@@ -26,6 +25,7 @@ import {
   saveShopSettings,
   saveWeekSchedule,
 } from "@/server/admin/catalogue-admin";
+import { attemptLogin } from "@/server/admin/login";
 import { requestHeaders, requireAdmin, startSession } from "@/server/admin/session";
 import { createBooking } from "@/server/booking/create-booking";
 import { NotFoundError, NotModifiableError, SlotUnavailableError } from "@/server/booking/errors";
@@ -43,13 +43,7 @@ import {
   notifyCancelled,
   notifyRescheduled,
 } from "@/server/email/notifications";
-import {
-  checkRateLimit,
-  clientIp,
-  peekRateLimit,
-  RATE_LIMITS,
-  resetRateLimit,
-} from "@/server/security/rate-limit";
+import { clientIp } from "@/server/security/rate-limit";
 
 /**
  * Admin Server Actions. Each one is a public POST endpoint, so each one:
@@ -97,8 +91,16 @@ function domainError(error: unknown): ActionState {
   ) {
     return { ok: false, message: error.message };
   }
-  // Never rethrow the original: Next.js would log it in full, and database
-  // errors carry the query parameters (customer name, email, phone).
+  return unexpected(error);
+}
+
+/**
+ * Last resort for any unexpected failure in an action. Never rethrow the
+ * original: Next.js would log it in full, and database errors carry the
+ * query parameters (customer name, email, phone, admin email).
+ */
+function unexpected(error: unknown): never {
+  unstable_rethrow(error);
   console.error("Admin action failed", describeError(error));
   throw new Error("Something went wrong. Please try again.");
 }
@@ -109,40 +111,25 @@ export async function login(_prev: ActionState, formData: FormData): Promise<Act
   const parsed = loginSchema.safeParse(formObject(formData));
   if (!parsed.success) return { ok: false, errors: fieldErrors(parsed.error) };
 
-  const db = getDb();
-  const { email, password } = parsed.data;
-  const ip = clientIp(await requestHeaders());
-  const pair = `${email}:${ip}`;
-  const tooMany = (seconds: number) => ({
-    ok: false,
-    message: `Too many attempts. Try again in ${Math.ceil(seconds / 60)} min.`,
-  });
-
-  // 1. Every attempt from this IP counts: one client trying many accounts.
-  const byIp = await checkRateLimit(db, RATE_LIMITS.loginPerIp, ip);
-  if (!byIp.allowed) return tooMany(byIp.retryAfter);
-
-  // 2. Only FAILURES count per account, and per account + IP, so that someone
-  //    who knows the owner's email cannot lock the owner out from elsewhere.
-  const [byPair, byAccount] = await Promise.all([
-    peekRateLimit(db, RATE_LIMITS.loginFailuresPerAccountAndIp, pair),
-    peekRateLimit(db, RATE_LIMITS.loginFailuresPerAccount, email),
-  ]);
-  if (!byPair.allowed || !byAccount.allowed) {
-    return tooMany(Math.max(byPair.retryAfter, byAccount.retryAfter));
+  let attempt: Awaited<ReturnType<typeof attemptLogin>>;
+  try {
+    attempt = await attemptLogin(getDb(), {
+      ...parsed.data,
+      ip: clientIp(await requestHeaders()),
+    });
+    if (attempt.ok) await startSession(attempt.admin.id);
+  } catch (error) {
+    return unexpected(error);
   }
 
-  const admin = await verifyCredentials(db, email, password);
-  if (!admin) {
-    await Promise.all([
-      checkRateLimit(db, RATE_LIMITS.loginFailuresPerAccountAndIp, pair),
-      checkRateLimit(db, RATE_LIMITS.loginFailuresPerAccount, email),
-    ]);
-    return { ok: false, message: "Email or password is incorrect." };
+  if (!attempt.ok) {
+    return attempt.reason === "rate_limited"
+      ? {
+          ok: false,
+          message: `Too many attempts. Try again in ${Math.ceil(attempt.retryAfter / 60)} min.`,
+        }
+      : { ok: false, message: "Email or password is incorrect." };
   }
-
-  await resetRateLimit(db, RATE_LIMITS.loginFailuresPerAccountAndIp, pair);
-  await startSession(admin.id);
   redirect("/admin");
 }
 
@@ -240,7 +227,11 @@ export async function saveServiceAction(
   const parsed = serviceSchema.safeParse(formObject(formData));
   if (!parsed.success) return { ok: false, errors: fieldErrors(parsed.error) };
 
-  await saveService(getDb(), parsed.data);
+  try {
+    await saveService(getDb(), parsed.data);
+  } catch (error) {
+    unexpected(error);
+  }
   updateTag(CATALOGUE_TAG);
   return { ok: true, message: `Saved "${parsed.data.name}".`, at: Date.now() };
 }
@@ -256,7 +247,11 @@ export async function saveBarberAction(
   });
   if (!parsed.success) return { ok: false, errors: fieldErrors(parsed.error) };
 
-  await saveBarber(getDb(), parsed.data);
+  try {
+    await saveBarber(getDb(), parsed.data);
+  } catch (error) {
+    unexpected(error);
+  }
   updateTag(CATALOGUE_TAG);
   return { ok: true, message: `Saved "${parsed.data.name}".`, at: Date.now() };
 }
@@ -284,7 +279,11 @@ export async function saveScheduleAction(
   const parsed = weekScheduleSchema.safeParse({ barberId: formData.get("barberId"), days });
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message };
 
-  await saveWeekSchedule(getDb(), parsed.data);
+  try {
+    await saveWeekSchedule(getDb(), parsed.data);
+  } catch (error) {
+    unexpected(error);
+  }
   updateTag(CATALOGUE_TAG);
   return { ok: true, message: "Schedule saved." };
 }
@@ -319,7 +318,11 @@ export async function deleteTimeOffAction(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = z.uuid().safeParse(formData.get("id"));
   if (!id.success) return;
-  await deleteTimeOff(getDb(), id.data);
+  try {
+    await deleteTimeOff(getDb(), id.data);
+  } catch (error) {
+    unexpected(error);
+  }
   updateTag(CATALOGUE_TAG);
 }
 
@@ -331,7 +334,11 @@ export async function saveSettingsAction(
   const parsed = shopSettingsSchema.safeParse(formObject(formData));
   if (!parsed.success) return { ok: false, errors: fieldErrors(parsed.error) };
 
-  await saveShopSettings(getDb(), parsed.data);
+  try {
+    await saveShopSettings(getDb(), parsed.data);
+  } catch (error) {
+    unexpected(error);
+  }
   updateTag(CATALOGUE_TAG);
   return { ok: true, message: "Settings saved." };
 }

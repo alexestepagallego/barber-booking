@@ -53,13 +53,12 @@ also runs anywhere `next start` runs, with any PostgreSQL 14+ that has the
    Wait until all of them show as **Verified**.
 3. Create an API key with "sending access" only, and set `RESEND_API_KEY`
    and `EMAIL_FROM`.
-4. Without a key, the app still works: emails are only logged.
+4. Without a key, the app still works: on Vercel emails are only logged; elsewhere (locally or self-hosted) they are written as HTML files to `./.mail`.
 
 ## 4. Bot protection (Turnstile)
 
 Create a Turnstile widget for your domain in Cloudflare (mode "Managed"),
-then set both keys. Verification is enforced whenever the secret is set,
-and fails closed if Cloudflare cannot be reached.
+then set both keys. Verification is enforced only when both keys are set (with just one of them, the check is skipped and a warning is logged), and it fails closed if Cloudflare cannot be reached.
 
 ## 5. First admin
 

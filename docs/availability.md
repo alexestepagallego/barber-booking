@@ -19,8 +19,7 @@ twice a year.
 
 ## Inputs
 
-- **Shop settings:** time zone (`Europe/Madrid`), slot grid (15 min), booking
-  horizon (60 days) and minimum notice (60 min).
+- **Shop settings:** time zone (`Europe/Madrid`), slot grid (15 min), booking horizon (60 days) and minimum notice (60 min) for customers. Staff bookings and staff reschedules use no minimum notice and a 365-day horizon.
 - **Service duration:** for example, 15 min for a beard trim or 45 min for a
   cut with beard.
 - **Per eligible barber** (active and offering the service):

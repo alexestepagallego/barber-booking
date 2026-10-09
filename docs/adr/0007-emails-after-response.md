@@ -33,8 +33,7 @@ job. The Vercel Hobby plan allows crons only once a day.
   and ends at the end of tomorrow:
   - Each appointment is claimed with its own conditional `UPDATE` right
     before sending, re-checking it is still confirmed at the same time.
-  - A failed send releases the claim, so the next day's run retries it if
-    the appointment has not started.
+  - A failed send releases the claim, so the next day's run retries it if the appointment starts at least one hour after that run.
   - The run stops after a 40 s budget (the function limit is 60 s), and the
     rest is left for the next run.
 - **Transports:** Resend in production, called with `fetch` because one

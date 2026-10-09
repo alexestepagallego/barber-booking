@@ -39,9 +39,7 @@ stored = SHA-256(token)
 - **Security rests on the secret.** Someone with the database dump but not
   `MANAGE_LINK_SECRET` can neither recover nor forge links. Someone with
   both could forge links, but at that point they already have the data.
-  The secret is required in production (at least 32 characters): without
-  it, every request that needs a manage link fails loudly instead of
-  falling back to a weak default.
+  The secret is required in production (at least 32 characters): without it, every request that needs a manage link fails loudly instead of falling back to a weak default. Outside production a development default is used, which is why `npm run tokens:rehash` refuses to run unless the real secret is set.
 - **Rotation is the emergency brake.** Changing the secret invalidates every
   link at once. `npm run tokens:rehash` then rewrites the stored hashes, so
   emails sent after the rotation carry working links again. The procedure

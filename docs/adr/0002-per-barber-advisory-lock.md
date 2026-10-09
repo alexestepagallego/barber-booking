@@ -29,8 +29,7 @@ second.
 
 ## Decision
 
-Every transaction that writes a barber's schedule first takes a
-transaction-scoped advisory lock keyed on that barber:
+Every transaction that inserts an appointment or moves one (new bookings and reschedules) first takes a transaction-scoped advisory lock keyed on the (target) barber:
 
 ```sql
 SELECT pg_advisory_xact_lock(7301, hashtext(:barber_id));
@@ -50,13 +49,11 @@ The exclusion constraint stays. The lock is a throughput optimisation, and
 the constraint is the guarantee. A test inserts concurrently without the
 lock to prove the constraint still holds on its own.
 
-As a second layer, transactions that fail with `40P01` (deadlock) or `40001`
-(serialization failure) are retried up to 5 times with jittered backoff.
+As a second layer, booking and reschedule transactions that fail with `40P01` (deadlock) or `40001` (serialization failure) are attempted up to 5 times in total, with a linearly growing, jittered delay (10 ms × attempt × 0.5–1.5).
 
 ## Consequences
 
-- Concurrency suite: from flaky 30 s+ timeouts to a stable ~1.4 s for the
-  whole suite (22 tests, including 3 races of 50 to 100 requests).
+- At the time of this decision, the whole test suite (then 22 tests, including the 3 booking races of 50 to 100 requests) went from flaky 30 s+ timeouts to a stable ~1.4 s.
 - Bookings for one barber are serialised. At barbershop scale, a handful of
   writes per minute at most, this costs nothing measurable.
 - Any new write path that modifies a barber's schedule (reschedule, admin

@@ -88,15 +88,36 @@ database until the transaction ends. See `src/server/booking/schedule-lock.ts`.
 `src/server/booking/appointments-repository.ts` never asks whether a slot
 is free. It inserts, and:
 
-- `23P01` on `appointments_no_overlap` → `SlotUnavailableError` → HTTP 409.
+- `23P01` on `appointments_no_overlap` → `SlotUnavailableError` → HTTP 409, unless the request's Idempotency-Key matches an existing booking, which is then returned instead (a replay can trip either constraint).
   The UI refreshes the available times and keeps the form data.
-- `23505` on `appointments_idempotency_key_unique` → the request is a retry
+- `23505` on `appointments_idempotency_key_hash_unique` → the request is a retry
   of one that already succeeded, so it returns the original booking instead
   of an error. This covers double taps and network retries.
 
 Availability shown in the UI is only a hint. Between showing a time and
 submitting the form, someone else may take it, and the constraint is what
 decides.
+
+## Every other write follows the same rules
+
+New bookings are not the only writes that can race. Each one either takes
+a lock or compares, in its `UPDATE`, everything its decision was based on:
+
+| Write                           | Protection                                                                                                                                   | If it loses the race                                                                                  |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Reschedule (customer or staff)  | per-barber advisory lock + the exclusion constraint + `UPDATE … WHERE status = 'confirmed' AND starts_at = $old AND barber_id = $old`        | 409 "slot no longer available", or "this appointment was just changed"                                |
+| Cancel                          | `UPDATE … WHERE status = 'confirmed' AND starts_at = $old AND barber_id = $old`                                                              | "this appointment was just changed" (or "no longer active" if the other change had already committed) |
+| Completed / no-show             | `UPDATE … WHERE status = 'confirmed' AND starts_at = $old`                                                                                   | "this appointment was just changed"                                                                   |
+| Reminder                        | claimed per appointment, right before sending, with `UPDATE … WHERE reminder_sent_at IS NULL AND status = 'confirmed' AND starts_at = $seen` | skipped; a failed send releases the claim                                                             |
+| Weekly hours, barber's services | `SELECT … FOR UPDATE` on the barber row, then replace                                                                                        | waits, then replaces whole (never a merge of two versions)                                            |
+| New service or barber           | unique slug, retried with the next suffix on conflict                                                                                        | gets `name-2`                                                                                         |
+| Rate-limit counters             | one atomic upsert per hit                                                                                                                    | exact count under concurrency                                                                         |
+
+The barber check in reschedule and cancel came from the adversarial review.
+Comparing only the start time let a staff barber change and a customer
+time change both succeed, with the second silently undoing the first. The
+schedule lock came from the second review: two concurrent saves under
+`READ COMMITTED` merged both versions into overlapping shifts.
 
 ## How it is tested
 
@@ -114,3 +135,8 @@ To make the races real, every request has its own pooled connection,
 connections are opened before the race starts, and all requests wait on
 the same promise before firing. The random test uses a seeded generator, so
 a failure can be reproduced exactly.
+
+The same file and its neighbours also race two cancellations, two
+customers moving into the same time, a cancellation against a reschedule,
+two overlapping reminder runs, two schedule saves, two identical service
+creations, and 20 concurrent hits on a rate limit of 5.

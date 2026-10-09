@@ -57,7 +57,7 @@ sequenceDiagram
     participant M as Resend
 
     B->>API: details + Idempotency-Key + Turnstile token
-    API->>API: Zod · honeypot · rate limits (IP, recipient) · Turnstile
+    API->>API: honeypot · Zod · IP rate limit · Turnstile · recipient limit
     API->>D: input
     D->>DB: availability (opening hours, notice, horizon, time off)
     D->>DB: BEGIN · advisory lock(barber) · INSERT appointment + event · COMMIT
@@ -87,8 +87,7 @@ appears in API URLs or access logs.
   one wins and the other gets a clear "this appointment was just changed".
 - A reschedule takes the same lock and hits the same constraint as a new
   booking.
-- Customers can change a booking online until the cutoff (default 2 h
-  before); staff can change it at any time.
+- Customers can change a booking online until the cutoff (default 2 h before); staff can still change it after the cutoff, until the appointment starts.
 
 ### Admin panel
 

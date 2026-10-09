@@ -60,7 +60,8 @@ erDiagram
         timestamptz ends_at
         enum status "confirmed|cancelled|completed|no_show"
         text manage_token_hash UK
-        uuid idempotency_key UK
+        text idempotency_key_hash UK
+        int price_cents "at booking time"
         timestamptz reminder_sent_at
     }
     appointment_events {
@@ -101,9 +102,9 @@ erDiagram
 | Invariant                                                    | How                                                                                                                                                                                               |
 | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | A barber never has two overlapping confirmed appointments    | `appointments_no_overlap`: `EXCLUDE USING gist (barber_id WITH =, tstzrange(starts_at, ends_at, '[)') WITH &&) WHERE status = 'confirmed'` ([ADR 0001](adr/0001-database-enforced-no-overlap.md)) |
-| Appointments end after they start                            | `CHECK (ends_at > starts_at)` (also on `time_off` and `working_hours`)                                                                                                                            |
+| Appointments end after they start                            | `CHECK (ends_at > starts_at)` (also on `time_off`; `working_hours` has `CHECK (end_time > start_time)`)                                                                                           |
 | `cancelled_at` is set exactly when the status is `cancelled` | `CHECK ((status = 'cancelled') = (cancelled_at IS NOT NULL))`                                                                                                                                     |
-| One booking per idempotency key                              | `UNIQUE (idempotency_key)`                                                                                                                                                                        |
+| One booking per idempotency key                              | `UNIQUE (idempotency_key_hash)`: only the SHA-256 of the client's key is stored, and the nightly maintenance cron clears it once it is older than 24 h                                            |
 | One shop settings row                                        | `CHECK (id = 1)`                                                                                                                                                                                  |
 | Sensible services                                            | duration 1–480 min, price ≥ 0                                                                                                                                                                     |
 | Admin emails are lower-case and unique                       | `CHECK (email = lower(email))` + `UNIQUE`                                                                                                                                                         |
@@ -115,8 +116,10 @@ erDiagram
   times in the shop's zone, because the shop opens at 9 in summer and in
   winter. Everything that happens at a point in time is `timestamptz`.
   [availability.md](availability.md) explains the conversion.
-- **Durations are fixed at booking time.** `ends_at` is stored, so changing
-  a service's duration later never moves existing appointments.
+- **What was booked stays booked.** `ends_at` and `price_cents` are stored
+  on the appointment. Changing a service's duration or price later never
+  changes existing appointments, not even when one is moved, and
+  deactivating a service or barber only stops NEW bookings.
 - **Append-only history.** `appointment_events` records who did what
   (`customer`, `admin`, `system`) and is shown on the admin appointment
   page. Concurrency tests check that the history always matches the row.
@@ -128,12 +131,13 @@ erDiagram
 
 ## Migrations
 
-| File                                   | Adds                                                                              |
-| -------------------------------------- | --------------------------------------------------------------------------------- |
-| `0000_initial_schema.sql`              | catalogue, schedule, appointments, events                                         |
-| `0001_no_overlapping_appointments.sql` | `btree_gist` + the exclusion constraint (hand-written: Drizzle cannot express it) |
-| `0002_shop_contact_details.sql`        | shop phone and address                                                            |
-| `0003_admin_auth_and_rate_limits.sql`  | admin users, sessions, rate-limit counters                                        |
+| File                                   | Adds                                                                                                              |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `0000_initial_schema.sql`              | catalogue, schedule, appointments, events                                                                         |
+| `0001_no_overlapping_appointments.sql` | `btree_gist` + the exclusion constraint (hand-written: Drizzle cannot express it)                                 |
+| `0002_shop_contact_details.sql`        | shop phone and address                                                                                            |
+| `0003_admin_auth_and_rate_limits.sql`  | admin users, sessions, rate-limit counters                                                                        |
+| `0004`–`0006`                          | price stored per appointment; the idempotency key replaced by its hash (add column, backfill, drop: no data lost) |
 
 `npm run db:generate` creates a migration from schema changes. CI fails if
 the schema and the migrations drift apart.

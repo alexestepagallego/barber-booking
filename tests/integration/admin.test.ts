@@ -16,6 +16,7 @@ import {
   saveService,
   saveWeekSchedule,
 } from "@/server/admin/catalogue-admin";
+import { attemptLogin } from "@/server/admin/login";
 import { zonedDateTime } from "@/server/booking/availability";
 import { createBooking } from "@/server/booking/create-booking";
 import { getAvailability } from "@/server/booking/get-availability";
@@ -115,6 +116,52 @@ describe("admin authentication", () => {
     });
 
     expect(await findSession(db, token, now)).toBeUndefined();
+  });
+});
+
+describe("attemptLogin", () => {
+  const owner = { email: "owner@example.com", name: "Owner", password: PASSWORD };
+  const tryLogin = (password: string, ip: string, at = now) =>
+    attemptLogin(db, { email: owner.email, password, ip }, at);
+
+  beforeEach(async () => {
+    await createAdminUser(db, owner);
+  });
+
+  it("signs in with the right password", async () => {
+    expect(await tryLogin(PASSWORD, "198.51.100.1")).toMatchObject({ ok: true });
+  });
+
+  it("a stranger who knows the owner's email cannot lock the owner out", async () => {
+    for (let i = 0; i < 6; i++) await tryLogin("guess", "203.0.113.66");
+    // The attacker's own IP is now blocked for this account…
+    expect(await tryLogin("guess", "203.0.113.66")).toMatchObject({ reason: "rate_limited" });
+    // …but the owner, from anywhere else, still gets in with the right password.
+    expect(await tryLogin(PASSWORD, "198.51.100.1")).toMatchObject({ ok: true });
+  });
+
+  it("successful sign-ins never use up the per-account budget", async () => {
+    for (let i = 0; i < 10; i++) {
+      expect(await tryLogin(PASSWORD, `198.51.100.${i}`)).toMatchObject({ ok: true });
+    }
+  });
+
+  it("a success clears earlier failures from the same place", async () => {
+    for (let i = 0; i < 4; i++) await tryLogin("typo", "198.51.100.1");
+    expect(await tryLogin(PASSWORD, "198.51.100.1")).toMatchObject({ ok: true });
+    for (let i = 0; i < 4; i++) {
+      expect(await tryLogin("typo", "198.51.100.1")).toMatchObject({ reason: "invalid" });
+    }
+  });
+
+  it("caps distributed guessing with an account-wide failure ceiling", async () => {
+    for (let i = 0; i < 50; i++) await tryLogin("guess", `203.0.113.${i}`);
+    expect(await tryLogin("guess", "203.0.113.200")).toMatchObject({ reason: "rate_limited" });
+  });
+
+  it("limits every attempt per IP", async () => {
+    for (let i = 0; i < 20; i++) await tryLogin(PASSWORD, "198.51.100.9");
+    expect(await tryLogin(PASSWORD, "198.51.100.9")).toMatchObject({ reason: "rate_limited" });
   });
 });
 

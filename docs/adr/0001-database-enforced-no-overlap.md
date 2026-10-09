@@ -36,7 +36,7 @@ That rules out any lock kept in application memory.
 ## Decision
 
 ```sql
-CREATE EXTENSION btree_gist;
+CREATE EXTENSION IF NOT EXISTS btree_gist;
 
 ALTER TABLE appointments ADD CONSTRAINT appointments_no_overlap
   EXCLUDE USING gist (

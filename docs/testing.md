@@ -1,6 +1,6 @@
 # Testing
 
-Three levels, all running in CI on every push:
+Three levels, all running in CI on every push to `main` and on every pull request:
 
 | Level       | Tool       | Runs against                                    | What it proves                                                                                                                                                              |
 | ----------- | ---------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -18,9 +18,7 @@ npm run screenshots         # regenerates docs/screenshots
 
 ## The concurrency tests
 
-`tests/integration/concurrency.test.ts` is the heart of the suite. Every
-request gets its own pooled connection, connections are opened in advance,
-and all requests are released at once by a shared promise. That makes the
+`tests/integration/concurrency.test.ts` is the heart of the suite. In the 50-request tests every request gets its own pooled connection (the pool has 55, and 50 are opened in advance); the 100-request random test shares that pool. In all of them, every request is released at once by a shared promise. That makes the
 races real, not sequential.
 
 - 50 bookings of the same barber and time → **exactly 1** succeeds.
@@ -41,7 +39,7 @@ a rate limit of 5.
 
 ## Test databases
 
-Integration tests `TRUNCATE` everything and reseed before each file. They
+Integration tests `TRUNCATE` everything and reseed before each test. They
 refuse to run unless the database name contains `test`. E2E tests use
 their own database (the name must contain `e2e`), which is reset before
 each run. The catalogue is upserted rather than truncated there, so its ids
@@ -63,14 +61,25 @@ documented in the commits:
   broke logout.
 - Lost success messages and stale availability responses.
 
-Two adversarial multi-agent code reviews (one per half of the project)
-confirmed about 30 further issues, all fixed, including:
+Two adversarial multi-agent code reviews then went over the result:
+first phases 4–5 (manage links, emails), later phases 6–7 (admin panel,
+hardening). Each used four independent lenses (concurrency, security,
+framework correctness, UX and accessibility), and a separate agent tried
+to refute every finding before it counted. About 40 distinct confirmed issues
+were fixed, each with a regression test where one was possible. Examples:
 
-- a lost update between concurrent reschedules;
-- reminders never retried after a failure;
-- email idempotency keys colliding when a booking moved back to an earlier
-  time;
-- personal data in error logs.
+- A lost update between concurrent reschedules.
+- Reminders never retried after a failure.
+- Email idempotency keys colliding when a booking moved back to an
+  earlier time.
+- Personal data in error logs.
+- Anyone who knew the owner's email could lock the owner out of the admin
+  panel, through a per-account limit that counted correct passwords too.
+- A database copy was enough to replay a booking and obtain its manage
+  link, because idempotency keys were stored in plain text.
+- Deactivating a service made its existing bookings impossible to move,
+  and changing a duration stretched old bookings when they were moved.
+- Two simultaneous schedule saves merged into overlapping shifts.
 
 ## Manual checks still worth doing before a release
 

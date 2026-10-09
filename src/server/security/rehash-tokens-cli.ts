@@ -13,6 +13,14 @@ import { deriveManageToken, hashToken } from "./tokens";
  * docs/security.md): links in emails sent before the rotation stop
  * working, and every email sent afterwards carries a working new link.
  */
+// getManageLinkSecret() falls back to a development secret outside
+// production. Here that would silently write hashes nobody's link matches,
+// so the real secret is required explicitly.
+if ((process.env.MANAGE_LINK_SECRET ?? "").length < 32) {
+  console.error("Set MANAGE_LINK_SECRET (the new production secret, 32+ characters) first.");
+  process.exit(1);
+}
+
 void runWithDb(async (db) => {
   const rows = await db.select({ id: appointments.id }).from(appointments);
   await db.transaction(async (tx) => {
