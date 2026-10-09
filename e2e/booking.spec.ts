@@ -23,6 +23,24 @@ test.describe("customer journey", () => {
     expect(manage).toBeTruthy();
   });
 
+  test("without reduced motion, the shop-front intro plays and then opens the form", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      reducedMotion: "no-preference",
+      baseURL: test.info().project.use.baseURL,
+    });
+    const page = await context.newPage();
+    await page.goto("/");
+    await page.getByRole("link", { name: "Book an appointment" }).click();
+
+    const video = page.locator("video");
+    await expect(video).toBeVisible();
+    await expect(page.getByRole("button", { name: "Skip" })).toBeFocused();
+    await expect(page).toHaveURL(/\/book$/, { timeout: 10_000 });
+    await context.close();
+  });
+
   test("the form explains what is wrong and keeps what was typed", async ({ page }) => {
     await page.goto("/book");
     await expect(page.getByRole("radio", { name: /Classic cut/ })).toBeEnabled();

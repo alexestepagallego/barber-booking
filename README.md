@@ -130,7 +130,7 @@ a browser. Turnstile is skipped until its keys are set.
 | --------------------------------------------------- | ----- | -------------------------- |
 | Unit                                                | 62    | `npm run test:unit`        |
 | Integration and concurrency (real Postgres)         | 91    | `npm run test:integration` |
-| End-to-end, desktop + mobile, on a production build | 26    | `npm run test:e2e`         |
+| End-to-end, desktop + mobile, on a production build | 28    | `npm run test:e2e`         |
 
 CI runs formatting, lint, type checks, a schema-drift check, all three suites and a production build on every push to `main` and every pull request. The suites found real bugs
 along the way, and two adversarial multi-agent code reviews confirmed and
