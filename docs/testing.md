@@ -27,7 +27,7 @@ races real, not sequential.
   pairs in the database, and every rejection really overlaps an accepted
   booking (no false rejections). The generator is seeded, so failures can
   be reproduced.
-- 50 raw inserts that skip the lock → still exactly 1 (the constraint holds
+- 10 raw inserts that skip the lock → still exactly 1 (the constraint holds
   on its own).
 - A counter-example without the constraint shows that check-then-insert
   books all 50.

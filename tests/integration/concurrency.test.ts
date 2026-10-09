@@ -163,35 +163,45 @@ describe(`${CONCURRENCY} simultaneous requests`, () => {
 });
 
 describe("defence in depth", () => {
-  it("the constraint alone still prevents double booking when a write path skips the lock", async () => {
-    const start = at("10:00");
-    const results = await race(
-      Array.from(
-        { length: CONCURRENCY },
-        (_, i) => () =>
-          db.insert(appointments).values({
-            ...customer,
-            barberId: barberIds[0]!,
-            serviceId,
-            startsAt: start,
-            endsAt: addMinutes(start, 30),
-            manageTokenHash: `raw-insert-${i}`,
-            priceCents: 1500,
-          }),
-      ),
-    );
+  // Without the lock, mutually overlapping inserts deadlock and Postgres
+  // resolves one deadlock per second (deadlock_timeout): the very storm the
+  // lock exists to prevent. 10 requests prove the point without making the
+  // test slow on CI machines.
+  const UNLOCKED = 10;
 
-    const rejectionCodes = new Set(
-      results
-        .filter((r): r is PromiseRejectedResult => r.status === "rejected")
-        .map((r) => (r.reason as { cause?: { code?: string } }).cause?.code),
-    );
-    // Without the lock some losers may see a deadlock instead of a clean
-    // conflict, which is exactly why the app takes the lock, but none of
-    // them gets in.
-    expect([...rejectionCodes].every((code) => code === "23P01" || code === "40P01")).toBe(true);
-    expect(await db.$count(appointments)).toBe(1);
-  });
+  it(
+    "the constraint alone still prevents double booking when a write path skips the lock",
+    { timeout: 60_000 },
+    async () => {
+      const start = at("10:00");
+      const results = await race(
+        Array.from(
+          { length: UNLOCKED },
+          (_, i) => () =>
+            db.insert(appointments).values({
+              ...customer,
+              barberId: barberIds[0]!,
+              serviceId,
+              startsAt: start,
+              endsAt: addMinutes(start, 30),
+              manageTokenHash: `raw-insert-${i}`,
+              priceCents: 1500,
+            }),
+        ),
+      );
+
+      const rejectionCodes = new Set(
+        results
+          .filter((r): r is PromiseRejectedResult => r.status === "rejected")
+          .map((r) => (r.reason as { cause?: { code?: string } }).cause?.code),
+      );
+      // Without the lock some losers may see a deadlock instead of a clean
+      // conflict, which is exactly why the app takes the lock, but none of
+      // them gets in.
+      expect([...rejectionCodes].every((code) => code === "23P01" || code === "40P01")).toBe(true);
+      expect(await db.$count(appointments)).toBe(1);
+    },
+  );
 });
 
 /**

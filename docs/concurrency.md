@@ -128,7 +128,7 @@ All of these run against a real PostgreSQL in CI (`npm run test:integration`).
 | 50 requests, same barber and time                 | Exactly **1** succeeds; the other 49 get `SlotUnavailableError`, with no other errors.                               |
 | 50 "no preference" requests, 2 barbers            | Exactly **2** succeed, one per barber.                                                                               |
 | 100 requests, random times, durations and barbers | **0** overlapping pairs in the database, **and** every rejection overlaps an accepted booking (no false rejections). |
-| 50 raw inserts that skip the lock                 | Still exactly **1** row: the constraint holds on its own.                                                            |
+| 10 raw inserts that skip the lock                 | Still exactly **1** row: the constraint holds on its own.                                                            |
 | Counter-example without the constraint            | Check-then-insert books **all 50**.                                                                                  |
 
 To make the races real, every request has its own pooled connection,
