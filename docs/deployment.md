@@ -36,7 +36,7 @@ also runs anywhere `next start` runs, with any PostgreSQL 14+ that has the
 | `CRON_SECRET`                             | yes         | `openssl rand -base64 32` (Vercel sends it to the crons automatically)             |
 | `APP_URL`                                 | recommended | `https://your-domain`. Without it, Vercel's production domain is used              |
 | `RESEND_API_KEY`                          | for emails  | from Resend, after verifying the domain (below)                                    |
-| `EMAIL_FROM`                              | for emails  | `Chane Barber <bookings@mail.your-domain>`                                         |
+| `EMAIL_FROM`                              | for emails  | `Barber Booker <bookings@mail.your-domain>`                                        |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY`          | recommended | Cloudflare Turnstile site key (rebuild after changing it: it is inlined)           |
 | `TURNSTILE_SECRET_KEY`                    | recommended | Cloudflare Turnstile secret                                                        |
 | `DATA_RETENTION_DAYS`                     | no          | default `365`                                                                      |

@@ -12,7 +12,7 @@ import {
 test.describe("customer journey", () => {
   test("from the landing page to a confirmed booking", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByRole("heading", { level: 1, name: "Chane Barber" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Barber Booker" })).toBeVisible();
     await expect(page.getByText("Classic cut").first()).toBeVisible();
 
     await page.getByRole("link", { name: "Book an appointment" }).click();

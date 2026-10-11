@@ -7,14 +7,14 @@ import { Monogram } from "@/components/monogram";
 import { formatDuration, formatPrice, WEEKDAY_NAMES } from "@/lib/format";
 import { getCatalogue } from "@/server/catalogue";
 
-import shopfront from "../../public/media/shopfront.jpg";
+import barbershop from "../../public/media/barbershop.jpg";
 
 export default function Home() {
   return (
     <>
       <header className="relative flex min-h-svh flex-col items-center justify-center overflow-hidden px-4 text-center">
         <Image
-          src={shopfront}
+          src={barbershop}
           alt=""
           fill
           priority
@@ -27,7 +27,7 @@ export default function Home() {
         <div className="relative flex flex-col items-center gap-6">
           <Monogram size="lg" />
           <p className="text-muted text-xs tracking-[0.35em] uppercase">Gentlemen&apos;s barber</p>
-          <h1 className="font-display text-6xl italic sm:text-8xl">Chane Barber</h1>
+          <h1 className="font-display text-6xl italic sm:text-8xl">Barber Booker</h1>
           <div className="bg-foreground h-px w-16" />
           <p className="text-muted max-w-sm font-light">Where your best occasion begins.</p>
           <Link
@@ -53,7 +53,7 @@ export default function Home() {
       </main>
 
       <footer className="border-border text-muted border-t px-4 py-10 text-center text-xs">
-        © Chane Barber · Demo project built with Next.js and PostgreSQL ·{" "}
+        © Barber Booker · Demo project built with Next.js and PostgreSQL ·{" "}
         <a
           href="https://github.com/alexestepagallego/barber-booking"
           className="hover:text-foreground underline"

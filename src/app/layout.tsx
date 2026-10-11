@@ -18,8 +18,8 @@ const body = Roboto({
 });
 
 export const metadata: Metadata = {
-  title: { default: "Chane Barber", template: "%s · Chane Barber" },
-  description: "Book your appointment at Chane Barber.",
+  title: { default: "Barber Booker", template: "%s · Barber Booker" },
+  description: "Book your appointment at Barber Booker.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

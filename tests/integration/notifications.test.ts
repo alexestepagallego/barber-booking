@@ -61,7 +61,7 @@ describe("appointment emails", () => {
     const [email] = mail.outbox;
     expect(email).toMatchObject({
       to: customer.customerEmail,
-      subject: "Your appointment at Chane Barber is confirmed",
+      subject: "Your appointment at Barber Booker is confirmed",
     });
     expect(email!.html).toContain("Classic cut");
     expect(email!.html).toContain("Chane");
@@ -78,7 +78,7 @@ describe("appointment emails", () => {
     await notifyRescheduled(db, id, local("10:00"));
 
     const [email] = mail.outbox;
-    expect(email!.subject).toBe("Your appointment at Chane Barber has moved");
+    expect(email!.subject).toBe("Your appointment at Barber Booker has moved");
     expect(email!.text).toContain("10:00");
     expect(email!.text).toContain("17:00");
     expect(icsOf()).toContain("SEQUENCE:1");
@@ -91,7 +91,7 @@ describe("appointment emails", () => {
     await notifyCancelled(db, id);
 
     const [email] = mail.outbox;
-    expect(email!.subject).toBe("Your appointment at Chane Barber was cancelled");
+    expect(email!.subject).toBe("Your appointment at Barber Booker was cancelled");
     expect(email!.html).toContain("/book");
     expect(email!.html).not.toContain("/manage/");
     expect(icsOf()).toContain("METHOD:CANCEL");
@@ -127,7 +127,7 @@ describe("sendDueReminders", () => {
 
     expect(await sendDueReminders(db, sundayEvening)).toMatchObject({ due: 1, sent: 1, failed: 0 });
     expect(mail.outbox).toHaveLength(1);
-    expect(mail.outbox[0]!.subject).toBe("See you tomorrow at Chane Barber");
+    expect(mail.outbox[0]!.subject).toBe("See you tomorrow at Barber Booker");
 
     // A second (or overlapping) run finds nothing to do.
     expect(await sendDueReminders(db, sundayEvening)).toMatchObject({ due: 0, sent: 0, failed: 0 });

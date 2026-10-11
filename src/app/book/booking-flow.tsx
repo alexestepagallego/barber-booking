@@ -282,8 +282,8 @@ export function BookingFlow({ catalogue, today }: { catalogue: Catalogue; today:
               className="mt-1 accent-white"
             />
             <span className="text-muted">
-              I agree that Chane Barber stores my details to manage this appointment, as described
-              in the{" "}
+              I agree that {shop.name} stores my details to manage this appointment, as described in
+              the{" "}
               <a href="/privacy" target="_blank" className="text-foreground underline">
                 privacy policy
               </a>

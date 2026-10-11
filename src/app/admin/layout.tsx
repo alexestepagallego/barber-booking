@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 // Nothing under /admin is ever indexed.
 export const metadata: Metadata = {
-  title: { default: "Admin", template: "%s · Admin · Chane Barber" },
+  title: { default: "Admin", template: "%s · Admin · Barber Booker" },
   robots: { index: false, follow: false, nocache: true },
 };
 

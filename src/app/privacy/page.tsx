@@ -18,7 +18,7 @@ export default function PrivacyPage() {
   return (
     <main className="mx-auto w-full max-w-2xl px-4 py-10 sm:py-16">
       <header className="mb-12 flex flex-col items-center gap-4 text-center">
-        <Link href="/" aria-label="Chane Barber home">
+        <Link href="/" aria-label="Barber Booker home">
           <Monogram />
         </Link>
         <h1 className="font-display text-4xl italic sm:text-5xl">Privacy policy</h1>

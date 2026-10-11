@@ -1,10 +1,11 @@
 /**
- * Demo data based on the real Chane Barber shop. Shared by the seed script
- * and the integration tests so both work with the same shape of data.
+ * Demo data for Barber Booker, a fictional shop inspired by a real one.
+ * Shared by the seed script and the integration tests so both work with the
+ * same shape of data.
  * Prices are placeholders.
  */
 export const SHOP = {
-  name: "Chane Barber",
+  name: "Barber Booker",
   // Placeholders: configure the real ones from the admin panel.
   phone: "+34 600 000 000",
   address: "Calle Mayor 1, Spain",

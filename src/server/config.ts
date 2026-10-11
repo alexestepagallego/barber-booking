@@ -15,9 +15,9 @@ export function appUrl(): string {
   return "http://localhost:3000";
 }
 
-/** Sender address, e.g. "Chane Barber <bookings@mail.example.com>". */
+/** Sender address, e.g. "Barber Booker <bookings@mail.example.com>". */
 export function emailFrom(): string {
-  return process.env.EMAIL_FROM ?? "Chane Barber <bookings@example.com>";
+  return process.env.EMAIL_FROM ?? "Barber Booker <bookings@example.com>";
 }
 
 /**

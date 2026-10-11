@@ -1,4 +1,4 @@
-/** The "CB" roundel from the shop sign. */
+/** The "BB" roundel of the Barber Booker brand. */
 export function Monogram({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
   const sizes = {
     sm: "h-10 w-10 text-sm",
@@ -10,7 +10,7 @@ export function Monogram({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
       aria-hidden="true"
       className={`font-display inline-flex items-center justify-center rounded-full border border-current tracking-tight ${sizes[size]}`}
     >
-      CB
+      BB
     </span>
   );
 }

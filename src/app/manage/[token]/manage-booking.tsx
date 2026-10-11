@@ -171,7 +171,7 @@ export function ManageBooking({
     const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar;charset=utf-8" }));
     const link = Object.assign(document.createElement("a"), {
       href: url,
-      download: "chane-barber-appointment.ics",
+      download: "barber-booker-appointment.ics",
     });
     link.click();
     // Give the browser time to start the download before releasing the blob.

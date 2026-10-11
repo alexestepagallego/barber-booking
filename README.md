@@ -1,14 +1,15 @@
-# barber-booking
+# Barber Booker
 
 [![CI](https://github.com/alexestepagallego/barber-booking/actions/workflows/ci.yml/badge.svg)](https://github.com/alexestepagallego/barber-booking/actions/workflows/ci.yml)
 ![Next.js 16](https://img.shields.io/badge/Next.js-16-black)
 ![PostgreSQL 17](https://img.shields.io/badge/PostgreSQL-17-336791)
 ![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178c6)
 
-Online booking for a real barbershop,
-[Chane Barber](https://github.com/alexestepagallego/chanebarber), built the
-way a production system should be: **double bookings are impossible, not
-just unlikely**, and that is proven by tests that release up to 100 overlapping booking requests at once against a real database.
+**Barber Booker** is online booking for a barbershop, built the way a
+production system should be: **double bookings are impossible, not just
+unlikely**, and that is proven by tests that release up to 100 overlapping
+booking requests at once against a real database. It grew out of the booking
+page of a real shop ([chanebarber](https://github.com/alexestepagallego/chanebarber)).
 
 **Live demo: [barber-booking-ten-iota.vercel.app](https://barber-booking-ten-iota.vercel.app)**.
 To try the staff panel, sign in at
@@ -192,3 +193,10 @@ Turnstile bot check switch on as soon as their keys are added
 
 Built with Claude Code as an AI pair programmer. The tests and reviews
 described above are how the result was checked.
+
+## Credits
+
+Landing page background: photo by
+[Barney Goodman](https://unsplash.com/@bgoodpic) on
+[Unsplash](https://unsplash.com/photos/AXurvQTtO3Y), used under the
+[Unsplash License](https://unsplash.com/license).

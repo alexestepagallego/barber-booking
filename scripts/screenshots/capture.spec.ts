@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { devices, expect, test, type Page } from "@playwright/test";
@@ -35,7 +35,7 @@ function nextOpenDay(): string {
 
 test("public pages and the confirmation email", async ({ page }) => {
   await page.goto("/", { waitUntil: "networkidle" });
-  // Wait for the shop-front photo behind the hero, not just the page shell.
+  // Wait for the background photo behind the hero, not just the page shell.
   await page.waitForFunction(() => {
     const image = document.querySelector<HTMLImageElement>("header img");
     return Boolean(image?.complete && image.naturalWidth > 0);
@@ -46,6 +46,7 @@ test("public pages and the confirmation email", async ({ page }) => {
   await fillDetails(page);
   await page.screenshot({ path: `${OUT}/booking.png`, fullPage: true });
 
+  const bookedAt = Date.now();
   await page.getByRole("button", { name: "Confirm booking" }).click();
   await expect(page.getByRole("heading", { name: /See you soon/ })).toBeVisible();
   await page.screenshot({ path: `${OUT}/confirmation.png` });
@@ -57,16 +58,19 @@ test("public pages and the confirmation email", async ({ page }) => {
   await chooseFirstTime(page, 4);
   await page.screenshot({ path: `${OUT}/manage.png`, fullPage: true });
 
-  // The local file transport saved the confirmation email as HTML.
-  await expect
-    .poll(() => readdirSync(".mail").filter((f) => f.endsWith(".html")).length)
-    .toBeGreaterThan(0);
-  const latest = readdirSync(".mail")
-    .filter((f) => f.includes("is-conf") && f.endsWith(".html"))
-    .map((f) => path.join(".mail", f))
-    .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0]!;
+  // The local file transport saved the confirmation email as HTML. It is the
+  // only email this test sends (the new time above is never confirmed), so
+  // take the file written after the booking. File names are not matched:
+  // they are cut to a fixed length and change with the shop name.
+  const emailsSinceBooking = () =>
+    (existsSync(".mail") ? readdirSync(".mail") : [])
+      .filter((f) => f.endsWith(".html"))
+      .map((f) => path.join(".mail", f))
+      .filter((f) => statSync(f).mtimeMs >= bookedAt);
+  await expect.poll(() => emailsSinceBooking().length).toBeGreaterThan(0);
+  const [confirmation] = emailsSinceBooking();
   await page.setViewportSize({ width: 680, height: 900 });
-  await page.setContent(readFileSync(latest, "utf8"));
+  await page.setContent(readFileSync(confirmation!, "utf8"));
   await page.screenshot({ path: `${OUT}/email.png`, fullPage: true });
 });
 

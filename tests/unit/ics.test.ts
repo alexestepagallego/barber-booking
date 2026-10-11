@@ -7,7 +7,7 @@ const event = {
   sequence: 0,
   startsAt: new Date("2026-10-08T08:00:00Z"),
   endsAt: new Date("2026-10-08T08:45:00Z"),
-  summary: "Cut + beard trim, Chane Barber",
+  summary: "Cut + beard trim, Barber Booker",
   description: "With Chane.\nManage: https://example.com/manage/abc",
   location: "Calle Mayor 1; Sevilla",
   status: "confirmed" as const,
@@ -56,7 +56,7 @@ describe("buildIcs", () => {
     expect(ics).toContain("DTSTART:20261008T080000Z");
     expect(ics).toContain("DTEND:20261008T084500Z");
     expect(ics).toContain("DTSTAMP:20261007T120000Z");
-    expect(ics).toContain("SUMMARY:Cut + beard trim\\, Chane Barber");
+    expect(ics).toContain("SUMMARY:Cut + beard trim\\, Barber Booker");
     expect(ics).toContain("LOCATION:Calle Mayor 1\\; Sevilla");
     expect(ics).toContain("STATUS:CONFIRMED");
   });
