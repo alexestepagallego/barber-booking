@@ -3,6 +3,7 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
 
+import { BrandLoader } from "@/components/brand-loader";
 import { Monogram } from "@/components/monogram";
 import { getCatalogue } from "@/server/catalogue";
 import { retentionDays } from "@/server/config";
@@ -19,12 +20,12 @@ export default function PrivacyPage() {
     <main className="mx-auto w-full max-w-2xl px-4 py-10 sm:py-16">
       <header className="mb-12 flex flex-col items-center gap-4 text-center">
         <Link href="/" aria-label="Barber Booker home">
-          <Monogram />
+          <Monogram introTarget />
         </Link>
         <h1 className="font-display text-4xl italic sm:text-5xl">Privacy policy</h1>
         <div className="bg-foreground h-px w-12" />
       </header>
-      <Suspense fallback={<p className="text-muted text-center">Loading…</p>}>
+      <Suspense fallback={<BrandLoader />}>
         <Policy />
       </Suspense>
     </main>

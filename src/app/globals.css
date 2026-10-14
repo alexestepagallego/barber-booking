@@ -19,7 +19,163 @@
   --font-display: var(--font-display);
 }
 
+/* Reserve the scrollbar's space even when there is nothing to scroll, so
+   the layout never shifts sideways (the intro locks scrolling while it plays). */
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
+}
+
+/* Intro curtain (src/components/intro-curtain.tsx). GSAP drives the drawing;
+   CSS covers what must work before, or without, JavaScript. */
+#bb-intro {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  color: var(--foreground);
+  /* Failsafe: until JavaScript takes over (data-state), it fades away by itself. */
+  animation: bb-intro-out 0.4s ease 3s forwards;
+}
+
+#bb-intro[data-state] {
+  animation: none;
+}
+
+/* The script sets the opacity, starting from the current one. */
+#bb-intro[data-state="leaving"] {
+  pointer-events: none;
+  transition: opacity 0.35s ease;
+}
+
+html[data-intro="skip"] #bb-intro {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #bb-intro {
+    display: none;
+  }
+}
+
+/* While it plays, nothing scrolls behind it, and the monogram it lands on
+   stays hidden so the two never show at once. */
+html:has(#bb-intro[data-state="playing"]) {
+  overflow: hidden;
+}
+
+html:has(#bb-intro[data-state="playing"]) [data-intro-target] {
+  visibility: hidden;
+}
+
+.bb-intro-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--background);
+}
+
+.bb-intro-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: min(56vw, 40vh, 300px);
+  aspect-ratio: 1;
+}
+
+.bb-intro-glow {
+  position: absolute;
+  inset: -35%;
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    circle,
+    rgb(255 255 255 / 0.4) 0%,
+    rgb(255 255 255 / 0.1) 38%,
+    transparent 68%
+  );
+}
+
+.bb-intro-logo {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* Only "backwards": once it has popped in, GSAP owns its transform. */
+.bb-intro-origin {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bb-intro-pop 0.45s cubic-bezier(0.34, 1.9, 0.64, 1) 0.1s backwards;
+}
+
+/* GSAP reveals it once every stroke is set to "not drawn yet". */
+.bb-intro-draw {
+  visibility: hidden;
+}
+
+@keyframes bb-intro-out {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+@keyframes bb-intro-pop {
+  from {
+    transform: scale(0);
+  }
+}
+
+/* Brand loader (src/components/brand-loader.tsx), the Suspense fallback.
+   It appears after React's 300 ms minimum fallback time, so quick loads
+   never flash it. */
+.bb-loader {
+  animation: bb-loader-in 0.25s ease 0.35s backwards;
+}
+
+.bb-loader-ring {
+  stroke-dasharray: 0.28 0.72;
+  animation: bb-loader-spin 1.2s linear infinite;
+}
+
+.bb-loader-letters {
+  animation: bb-loader-breathe 0.8s ease-in-out infinite alternate;
+}
+
+@keyframes bb-loader-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes bb-loader-spin {
+  to {
+    stroke-dashoffset: -1;
+  }
+}
+
+@keyframes bb-loader-breathe {
+  from {
+    opacity: 0.45;
+  }
+}
+
+/* Reduced motion: a still, complete ring, and the letters only fade
+   slowly, which still says "loading". */
+@media (prefers-reduced-motion: reduce) {
+  .bb-loader-ring {
+    stroke-dasharray: none;
+    animation: none;
+  }
+
+  .bb-loader-letters {
+    animation-duration: 1.6s;
+  }
 }

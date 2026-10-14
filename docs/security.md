@@ -26,7 +26,7 @@ this page is the overview and the runbook.
 | CSRF                                      | `SameSite=Lax`; Server Actions check `Origin`; logout and the manage APIs only accept same-origin POSTs or bearer tokens                                                                                                                                                                                                                                           |
 | Using the booking form to spam an inbox   | Cloudflare Turnstile (fails closed), honeypot field, 10 validated booking requests per IP per hour (IPv6 counted per /64), max 5 confirmations per inbox per day (`+tags` and Gmail dots normalised), charged only after the bot check and only for created bookings, so nobody can use up a customer's budget ([ADR 0005](adr/0005-rate-limiting-in-postgres.md)) |
 | Email content injection                   | React Email escapes all values; customer names must start with a letter and may only contain letters (any script), spaces and `' ’ . -`, so no URLs end up in greetings                                                                                                                                                                                            |
-| XSS / clickjacking                        | React escaping, no `dangerouslySetInnerHTML`, CSP with `object-src 'none'`, `frame-ancestors 'none'`, `base-uri` and `form-action` locked ([ADR 0006](adr/0006-static-csp.md))                                                                                                                                                                                     |
+| XSS / clickjacking                        | React escaping; `dangerouslySetInnerHTML` only for two constant strings in the root layout (intro gate script, `<noscript>` style), never user data; CSP with `object-src 'none'`, `frame-ancestors 'none'`, `base-uri` and `form-action` locked ([ADR 0006](adr/0006-static-csp.md))                                                                              |
 | Leaking internals in errors               | One error mapper: domain errors become clear 4xx; anything else becomes a generic 500                                                                                                                                                                                                                                                                              |
 | Personal data in logs                     | Errors in route handlers and Server Actions are logged through `describeError()`: database errors only log the SQLSTATE and constraint name, never Drizzle's message, which includes query parameters                                                                                                                                                              |
 | Unauthorized cron calls                   | `Bearer $CRON_SECRET`, compared in constant time; closed when the secret is not set                                                                                                                                                                                                                                                                                |
@@ -71,8 +71,8 @@ log):
 
 ## Known limitations
 
-- The CSP allows inline scripts (a consequence of prerendering; see
-  ADR 0006).
+- The CSP allows inline scripts (a consequence of prerendering; the
+  intro gate script in `<head>` relies on it too; see ADR 0006).
 - The admin panel has no 2FA and no password reset by email: the owner
   resets passwords with the CLI.
 - Unknown manage links are soft 404s (HTTP 200 + `noindex`): a streaming

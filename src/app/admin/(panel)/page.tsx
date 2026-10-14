@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 
+import { BrandLoader } from "@/components/brand-loader";
 import { addDays, parseDate } from "@/lib/calendar";
 import { formatCalendarDate, formatTime } from "@/lib/format";
 import { loadAdminCatalogue, loadAgenda, loadTimeOffForDay } from "@/server/admin/catalogue-admin";
@@ -27,7 +28,7 @@ const STATUS_LABEL = {
 
 export default function AgendaPage({ searchParams }: PageProps<"/admin">) {
   return (
-    <Suspense fallback={<p className="text-muted">Loading agenda…</p>}>
+    <Suspense fallback={<BrandLoader label="Loading agenda…" />}>
       <Agenda searchParams={searchParams} />
     </Suspense>
   );

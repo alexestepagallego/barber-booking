@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 
+import { BrandLoader } from "@/components/brand-loader";
 import { loadAdminCatalogue } from "@/server/admin/catalogue-admin";
 import { requireAdminPage } from "@/server/admin/session";
 import { getDb } from "@/server/db/client";
@@ -14,7 +15,7 @@ export default function SettingsPage() {
   return (
     <div className="grid max-w-2xl gap-8">
       <h1 className="font-display text-4xl italic">Settings</h1>
-      <Suspense fallback={<p className="text-muted">Loading…</p>}>
+      <Suspense fallback={<BrandLoader />}>
         <SettingsForm />
       </Suspense>
     </div>

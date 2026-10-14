@@ -3,6 +3,7 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
 
+import { BrandLoader } from "@/components/brand-loader";
 import { Monogram } from "@/components/monogram";
 import { formatDuration, formatPrice, WEEKDAY_NAMES } from "@/lib/format";
 import { getCatalogue } from "@/server/catalogue";
@@ -25,7 +26,7 @@ export default function Home() {
         <div className="from-background/30 via-background/60 to-background absolute inset-0 bg-gradient-to-b" />
 
         <div className="relative flex flex-col items-center gap-6">
-          <Monogram size="lg" />
+          <Monogram size="lg" introTarget />
           <p className="text-muted text-xs tracking-[0.35em] uppercase">Gentlemen&apos;s barber</p>
           <h1 className="font-display text-6xl italic sm:text-8xl">Barber Booker</h1>
           <div className="bg-foreground h-px w-16" />
@@ -47,7 +48,7 @@ export default function Home() {
       </header>
 
       <main id="services" className="mx-auto w-full max-w-4xl px-4 py-24">
-        <Suspense fallback={<p className="text-muted text-center">Loading…</p>}>
+        <Suspense fallback={<BrandLoader />}>
           <ShopDetails />
         </Suspense>
       </main>

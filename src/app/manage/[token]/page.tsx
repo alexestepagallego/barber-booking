@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
 
+import { BrandLoader } from "@/components/brand-loader";
 import { Monogram } from "@/components/monogram";
 import { manageTokenSchema } from "@/lib/booking-schema";
 import { localDate } from "@/server/booking/availability";
@@ -34,7 +35,7 @@ export default function ManagePage({ params }: PageProps<"/manage/[token]">) {
         <div className="bg-foreground h-px w-12" />
       </header>
 
-      <Suspense fallback={<p className="text-muted text-center">Loading…</p>}>
+      <Suspense fallback={<BrandLoader />}>
         <ManageLoader params={params} />
       </Suspense>
     </main>

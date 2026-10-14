@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 
+import { BrandLoader } from "@/components/brand-loader";
 import { formatLongDate, formatTime, WEEKDAY_NAMES } from "@/lib/format";
 import { loadAdminCatalogue } from "@/server/admin/catalogue-admin";
 import { requireAdminPage } from "@/server/admin/session";
@@ -16,7 +17,7 @@ export default function SchedulePage() {
   return (
     <div className="grid gap-10">
       <h1 className="font-display text-4xl italic">Hours &amp; time off</h1>
-      <Suspense fallback={<p className="text-muted">Loading…</p>}>
+      <Suspense fallback={<BrandLoader />}>
         <ScheduleEditor />
       </Suspense>
     </div>

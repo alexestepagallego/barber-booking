@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 
+import { BrandLoader } from "@/components/brand-loader";
 import { loadAdminCatalogue } from "@/server/admin/catalogue-admin";
 import { requireAdminPage } from "@/server/admin/session";
 import { getDb } from "@/server/db/client";
@@ -20,7 +21,7 @@ export default function ServicesPage() {
           page. Changes to duration or price apply to new bookings only.
         </p>
       </div>
-      <Suspense fallback={<p className="text-muted">Loading…</p>}>
+      <Suspense fallback={<BrandLoader />}>
         <ServiceList />
       </Suspense>
     </div>

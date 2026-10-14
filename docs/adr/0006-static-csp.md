@@ -40,8 +40,11 @@ HSTS in production. Two path rules are stricter:
 
 - `'unsafe-inline'` scripts are allowed, so the CSP does not stop an XSS
   that manages to inject an inline script. That job falls on the other
-  layers: React escapes all output, no `dangerouslySetInnerHTML` is used,
-  and inputs are validated with Zod (names only allow letters).
+  layers: React escapes all output, `dangerouslySetInnerHTML` appears only
+  in the root layout for two constant strings (the intro gate script from
+  `src/components/intro-gate.ts` and a `<noscript>` style), never with
+  request or user data, and inputs are validated with Zod (names only allow
+  letters).
 - Everything else is still locked down. No third-party origins except
   Cloudflare Turnstile, no plugins, no framing (clickjacking), no forms
   posting elsewhere and no `<base>` hijacking. `'unsafe-eval'` is allowed
@@ -51,4 +54,5 @@ HSTS in production. Two path rules are stricter:
   build by the E2E suite.
 - Revisit if Next.js gains hash- or SRI-based CSP support that covers its
   own inline scripts while keeping prerendering (`experimental.sri` does
-  not cover them today).
+  not cover them today). The app's own intro gate script is inline too, so
+  such a policy must also list its `'sha256-…'` hash in `script-src`.

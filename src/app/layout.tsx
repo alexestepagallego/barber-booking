@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Playfair_Display, Roboto } from "next/font/google";
 
 import { DemoBanner } from "@/components/demo-banner";
+import { IntroCurtain } from "@/components/intro-curtain";
+import { INTRO_GATE_SCRIPT } from "@/components/intro-gate";
 
 import "./globals.css";
 
@@ -24,8 +26,19 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${display.variable} ${body.variable} h-full antialiased`}>
+    // suppressHydrationWarning: the gate script may set data-intro on <html>
+    // before React hydrates.
+    <html
+      lang="en"
+      className={`${display.variable} ${body.variable} h-full antialiased`}
+      suppressHydrationWarning
+    >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: INTRO_GATE_SCRIPT }} />
+        <noscript dangerouslySetInnerHTML={{ __html: "<style>#bb-intro{display:none}</style>" }} />
+      </head>
       <body className="flex min-h-full flex-col">
+        <IntroCurtain />
         <DemoBanner />
         {children}
       </body>

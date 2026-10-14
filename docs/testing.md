@@ -2,11 +2,11 @@
 
 Three levels, all running in CI on every push to `main` and on every pull request:
 
-| Level       | Tool       | Runs against                                    | What it proves                                                                                                                                                              |
-| ----------- | ---------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Unit        | Vitest     | nothing (pure functions)                        | availability maths (split shifts, DST), calendar files, schemas, tokens, retry logic, rate-limit and Turnstile clients, security headers                                    |
-| Integration | Vitest     | a real PostgreSQL                               | booking rules, the no-overlap guarantee **under concurrency**, manage-link changes, emails and reminders, admin auth and catalogue, rate limiting, demo reset, data erasure |
-| End-to-end  | Playwright | `next build` + `next start`, desktop and mobile | customer journey, double booking from the UI, admin panel, accessibility (axe-core WCAG 2.1 AA), HTTP headers, cron auth                                                    |
+| Level       | Tool       | Runs against                                    | What it proves                                                                                                                                                                                                              |
+| ----------- | ---------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit        | Vitest     | nothing (pure functions)                        | availability maths (split shifts, DST), calendar files, schemas, tokens, retry logic, rate-limit and Turnstile clients, security headers                                                                                    |
+| Integration | Vitest     | a real PostgreSQL                               | booking rules, the no-overlap guarantee **under concurrency**, manage-link changes, emails and reminders, admin auth and catalogue, rate limiting, demo reset, data erasure                                                 |
+| End-to-end  | Playwright | `next build` + `next start`, desktop and mobile | customer journey, double booking from the UI, admin panel, accessibility (axe-core WCAG 2.1 AA), HTTP headers, cron auth, the intro curtain (plays once per tab, never on staff or manage pages, never with reduced motion) |
 
 ```bash
 npm test                    # unit + integration

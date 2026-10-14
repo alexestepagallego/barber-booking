@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { z } from "zod";
 
+import { BrandLoader } from "@/components/brand-loader";
 import { formatDuration, formatLongDate, formatPrice, formatTime } from "@/lib/format";
 import { loadAdminCatalogue } from "@/server/admin/catalogue-admin";
 import { requireAdminPage } from "@/server/admin/session";
@@ -41,7 +42,7 @@ export default function AppointmentPage({
   searchParams,
 }: PageProps<"/admin/appointments/[id]">) {
   return (
-    <Suspense fallback={<p className="text-muted">Loading…</p>}>
+    <Suspense fallback={<BrandLoader />}>
       <Detail params={params} searchParams={searchParams} />
     </Suspense>
   );
